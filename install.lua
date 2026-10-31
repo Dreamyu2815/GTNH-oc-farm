@@ -91,7 +91,8 @@ local function main(args)
     return
   end
   print("")
-  print("下一步：")
+  print("下一步（先进入安装目录）：")
+  print("  cd /home/ocfarm")
   print("  1) lua setup.lua    —— 探测并确认 AE 网络地址（生成 ae.dat）")
   print("  2) lua bind.lua     —— 绑定每台农场的控制器和红石口（生成 binds.dat）")
   print("  3) lua specs.lua    —— 看看这台电脑配置够不够")

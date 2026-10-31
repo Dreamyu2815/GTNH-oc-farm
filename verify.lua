@@ -176,21 +176,74 @@ local function farm_iface_entry(bind)
   } })
 end
 
--- 选一个作物（第一个有种子且有样板的）
-local function pick_crop()
-  local seeds = A:seeds_by_label("seed")
-  for _, layer in ipairs(cfg.priority or {}) do
-    for _, crop in ipairs(layer) do
-      local ci = cfg.crops[crop]
-      if ci then
-        local e = seeds[crop]
-        if e and (e.count or 0) >= 1 then
-          return crop, ci
+-- 优先级：以 priority.dat（运行时）为准，和 main.lua 一致；没有就退回 config.priority
+local priority_layers = {}
+do
+  local p = util.load(ROOT .. "/priority.dat", nil)
+  if type(p) == "table" and type(p.layers) == "table" then
+    for _, layer in ipairs(p.layers) do
+      if type(layer) == "table" then
+        local cur = {}
+        for _, c in ipairs(layer) do
+          if type(c) == "string" and c ~= "" then cur[#cur + 1] = c end
+        end
+        if #cur > 0 then priority_layers[#priority_layers + 1] = cur end
+      end
+    end
+  end
+  if #priority_layers == 0 then
+    for _, layer in ipairs(cfg.priority or {}) do
+      if type(layer) == "table" and #layer > 0 then priority_layers[#priority_layers + 1] = layer end
+    end
+  end
+end
+
+local function priority_desc()
+  local parts = {}
+  for i, layer in ipairs(priority_layers) do
+    parts[#parts + 1] = i .. "层=" .. table.concat(layer, ",")
+  end
+  return table.concat(parts, "；")
+end
+
+-- 从仓库样板里反查某作物的产物名和倍增数（新增作物不在 config.crops 里，也要能测）
+local function product_for(crop)
+  local wh = PAT:warehouse()
+  if not wh then return nil, nil end
+  for _, slot in ipairs(PAT:slots(wh)) do
+    local st = wh.patterns and wh.patterns[slot]
+    if type(st) == "table" and PAT:pattern_matches(st, crop) then
+      if type(st.outputs) == "table" then
+        for _, v in pairs(st.outputs) do
+          local l = v and (v.label or v.name)
+          if l then return tostring(l), (tonumber(v.size) or 0) end
         end
       end
     end
   end
   return nil, nil
+end
+
+-- 选一个作物：优先级里有、种子网里有种子、且仓库里有样板
+local function pick_crop()
+  local seeds = A:seeds_by_label("seed")
+  for _, layer in ipairs(priority_layers) do
+    for _, crop in ipairs(layer) do
+      local e = seeds[crop]
+      if e and (e.count or 0) >= 1 then
+        local ci = cfg.crops[crop]
+        local out = ci and ci.out
+        local mult = ci and ci.mult
+        if not out then
+          out, mult = product_for(crop)
+        end
+        if out then
+          return crop, out, (mult or 0) > 0 and mult or 1
+        end
+      end
+    end
+  end
+  return nil, nil, nil
 end
 
 local binds = util.load(BINDS, { seq = 0, farms = {} })
@@ -199,14 +252,25 @@ if type(binds.farms) ~= "table" or #binds.farms == 0 then
   return
 end
 
-local crop, ci = pick_crop()
+local crop, out, mult = pick_crop()
 if not crop then
-  say("[错误] 种子网络里没有任何可下发的作物种子。先手动放一批种子进种子网络。")
+  local seeds = A:seeds_by_label("seed")
+  local avail = {}
+  for name, e in pairs(seeds) do
+    if (e.count or 0) > 0 then avail[#avail + 1] = string.format("%s×%d", name, e.count) end
+  end
+  if #avail > 0 then
+    say("[错误] 种子网里其实有种子，但都不在优先级里（或仓库里没有对应样板）：")
+    for _, s in ipairs(avail) do say("        - %s", s) end
+    say("       优先级当前：%s", priority_desc())
+    say("       用 lua set.lua prio 把要测的作物加进优先级，或确认仓库里有它的样板。")
+  else
+    say("[错误] 种子网络里没有任何可下发的作物种子。先手动放一批种子进种子网络。")
+  end
   return
 end
 
-local out = ci.out or crop
-local mult = A:craftable_mult("seed", out) or ci.mult or 1
+mult = mult or A:craftable_mult("seed", out) or 1
 local wh = PAT:warehouse()
 if not wh then
   say("[错误] 找不到仓库接口（config.ae.warehouse_name 或空名字接口）。")
