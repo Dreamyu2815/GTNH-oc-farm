@@ -551,6 +551,12 @@ local function auto_config()
   if #slots == 0 then say("[配置] 仓库里没有样板，跳过自动配置"); return end
   local added, bedUnknown = {}, {}
   local lastLayer = cfg.priority[#cfg.priority]
+  -- 全新安装（优先级全空）：新发现的作物放第 1 层，而不是「未定级」的第 10 层
+  do
+    local total = 0
+    for _, lay in ipairs(cfg.priority) do total = total + #lay end
+    if total == 0 then lastLayer = cfg.priority[1] end
+  end
   for _, slot in ipairs(slots) do
     local ci = pattern_crop_info(wh.patterns and wh.patterns[slot])
     if ci and ci.crop ~= "" and ci.crop ~= "空白" then

@@ -3,8 +3,13 @@
 --  这是判断"红石端口 ↔ 活化工具台 ↔ 这台农场"是否连对的最终手段。
 --
 --  用法：
---    lua verify.lua            全部测一遍（一台一台来）
---    lua verify.lua <id>       只测第 <id> 台（id 与 bind.lua 的编号一致）
+--    lua verify.lua             全部测一遍（自动挑一个「有种子且有仓库样板」的作物）
+--    lua verify.lua <作物名>    只测指定作物（例：lua verify.lua 空间之花）
+--    lua verify.lua <id>        只测第 <id> 台（id 与 bind.lua 的编号一致）
+--    lua verify.lua <id> <作物  两台一起（顺序无所谓）
+--
+--  注意：verify 不依赖优先级——它只关心「种子网里有种子 + 仓库里有样板」，
+--        因为自检要验证的是发配链路本身，跟你怎么排优先级无关。
 --
 --  每台流程：
 --    读传感器(等级/容量) → 测红石可写 → 搬样板(仓库→本农场下单接口)
@@ -48,9 +53,14 @@ do
   end
 end
 local ONLY = nil
+local CROP_ARG = nil
 for _, a in ipairs(ARGS) do
   local n = tonumber(a)
-  if n then ONLY = n end
+  if n then
+    ONLY = n
+  elseif type(a) == "string" and a:gsub("%s", "") ~= "" then
+    CROP_ARG = a:gsub("种子$", "")   -- 允许 `空间之花种子` 也认
+  end
 end
 
 local function say(fmt, ...)
@@ -176,36 +186,6 @@ local function farm_iface_entry(bind)
   } })
 end
 
--- 优先级：以 priority.dat（运行时）为准，和 main.lua 一致；没有就退回 config.priority
-local priority_layers = {}
-do
-  local p = util.load(ROOT .. "/priority.dat", nil)
-  if type(p) == "table" and type(p.layers) == "table" then
-    for _, layer in ipairs(p.layers) do
-      if type(layer) == "table" then
-        local cur = {}
-        for _, c in ipairs(layer) do
-          if type(c) == "string" and c ~= "" then cur[#cur + 1] = c end
-        end
-        if #cur > 0 then priority_layers[#priority_layers + 1] = cur end
-      end
-    end
-  end
-  if #priority_layers == 0 then
-    for _, layer in ipairs(cfg.priority or {}) do
-      if type(layer) == "table" and #layer > 0 then priority_layers[#priority_layers + 1] = layer end
-    end
-  end
-end
-
-local function priority_desc()
-  local parts = {}
-  for i, layer in ipairs(priority_layers) do
-    parts[#parts + 1] = i .. "层=" .. table.concat(layer, ",")
-  end
-  return table.concat(parts, "；")
-end
-
 -- 从仓库样板里反查某作物的产物名和倍增数（新增作物不在 config.crops 里，也要能测）
 local function product_for(crop)
   local wh = PAT:warehouse()
@@ -224,26 +204,37 @@ local function product_for(crop)
   return nil, nil
 end
 
--- 选一个作物：优先级里有、种子网里有种子、且仓库里有样板
+-- 选测试作物：不依赖优先级。
+--   指定了作物 -> 用它（前提是有种子 + 仓库有样板）
+--   没指定     -> 从种子网里挑第一个「有种子且有仓库样板」的作物（按名字排序，结果稳定）
+local function testable(crop, seeds)
+  local e = seeds[crop]
+  if not e or (e.count or 0) < 1 then return nil end
+  local ci = cfg.crops and cfg.crops[crop]
+  local out = ci and ci.out
+  local mult = ci and ci.mult
+  if not out then out, mult = product_for(crop) end
+  if not out then return nil end
+  return out, (mult or 0) > 0 and mult or 1
+end
+
 local function pick_crop()
   local seeds = A:seeds_by_label("seed")
-  for _, layer in ipairs(priority_layers) do
-    for _, crop in ipairs(layer) do
-      local e = seeds[crop]
-      if e and (e.count or 0) >= 1 then
-        local ci = cfg.crops[crop]
-        local out = ci and ci.out
-        local mult = ci and ci.mult
-        if not out then
-          out, mult = product_for(crop)
-        end
-        if out then
-          return crop, out, (mult or 0) > 0 and mult or 1
-        end
-      end
-    end
+  if CROP_ARG then
+    local out, m = testable(CROP_ARG, seeds)
+    if out then return CROP_ARG, out, m end
+    return nil, nil, nil, CROP_ARG
   end
-  return nil, nil, nil
+  local names = {}
+  for name, e in pairs(seeds) do
+    if (e.count or 0) > 0 then names[#names + 1] = name end
+  end
+  table.sort(names)
+  for _, name in ipairs(names) do
+    local out, m = testable(name, seeds)
+    if out then return name, out, m end
+  end
+  return nil, nil, nil, nil
 end
 
 local binds = util.load(BINDS, { seq = 0, farms = {} })
@@ -252,20 +243,23 @@ if type(binds.farms) ~= "table" or #binds.farms == 0 then
   return
 end
 
-local crop, out, mult = pick_crop()
+local crop, out, mult, want = pick_crop()
 if not crop then
   local seeds = A:seeds_by_label("seed")
   local avail = {}
   for name, e in pairs(seeds) do
     if (e.count or 0) > 0 then avail[#avail + 1] = string.format("%s×%d", name, e.count) end
   end
-  if #avail > 0 then
-    say("[错误] 种子网里其实有种子，但都不在优先级里（或仓库里没有对应样板）：")
-    for _, s in ipairs(avail) do say("        - %s", s) end
-    say("       优先级当前：%s", priority_desc())
-    say("       用 lua set.lua prio 把要测的作物加进优先级，或确认仓库里有它的样板。")
+  if want then
+    say("[错误] 指定的作物 %s 测不了：种子网里没有它的种子，或仓库里没有它的样板。", want)
+  elseif #avail > 0 then
+    say("[错误] 种子网里这些作物都有种子，但仓库里都没有对应样板：")
   else
-    say("[错误] 种子网络里没有任何可下发的作物种子。先手动放一批种子进种子网络。")
+    say("[错误] 种子网络里没有任何种子。先放一批种子进种子网络。")
+  end
+  if #avail > 0 then
+    for _, s in ipairs(avail) do say("        - %s", s) end
+    say("        往仓库接口放对应样板后重试；也可以 lua verify.lua <作物> 指定要测的作物。")
   end
   return
 end
