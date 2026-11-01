@@ -187,12 +187,17 @@ local function farm_iface_entry(bind)
 end
 
 -- 从仓库样板里反查某作物的产物名和倍增数（新增作物不在 config.crops 里，也要能测）
-local function product_for(crop)
+-- 名字对不上（种子网里是中文、样板里是英文，或反过来）时，再按物品身份 name+damage 兜底匹配
+local function product_for(crop, seedstack)
   local wh = PAT:warehouse()
   if not wh then return nil, nil end
   for _, slot in ipairs(PAT:slots(wh)) do
     local st = wh.patterns and wh.patterns[slot]
-    if type(st) == "table" and PAT:pattern_matches(st, crop) then
+    local hit = type(st) == "table" and PAT:pattern_matches(st, crop)
+    if not hit and type(seedstack) == "table" then
+      hit = PAT:pattern_has_item(st, seedstack.name, seedstack.damage)
+    end
+    if hit then
       if type(st.outputs) == "table" then
         for _, v in pairs(st.outputs) do
           local l = v and (v.label or v.name)
@@ -213,7 +218,7 @@ local function testable(crop, seeds)
   local ci = cfg.crops and cfg.crops[crop]
   local out = ci and ci.out
   local mult = ci and ci.mult
-  if not out then out, mult = product_for(crop) end
+  if not out then out, mult = product_for(crop, e and e.stack) end
   if not out then return nil end
   return out, (mult or 0) > 0 and mult or 1
 end

@@ -6,8 +6,29 @@ local component = require("component")
 local pat = {}
 pat.__index = pat
 
+-- 作物名归一化：去掉末尾「种子 / Seed(s)」，再按 crops_zh.lua 把英文名翻成中文名。
+-- 仓库样板里的物品名和种子网里的名字，语言不一定一致（一边英文一边中文），
+-- 两边都过一遍这里才能对上；不认识的名字原样返回。
+local function load_zh(cfg)
+  if type(cfg) == "table" and type(cfg.CROPS_ZH) == "table" then return cfg.CROPS_ZH end
+  local roots = {}
+  if type(cfg) == "table" and type(cfg.root) == "string" then roots[#roots + 1] = cfg.root end
+  roots[#roots + 1] = "/home/ocfarm"
+  for _, r in ipairs(roots) do
+    local ok, t = pcall(dofile, r .. "/crops_zh.lua")
+    if ok and type(t) == "table" then return t end
+  end
+  return {}
+end
+
+local function norm(zhmap, s)
+  s = tostring(s or ""):gsub("种子$", ""):gsub("%s+[Ss]eeds?$", "")
+  local z = zhmap[s]
+  return z or s
+end
+
 function pat.new(cfg, aeaddr)
-  return setmetatable({ cfg = cfg, term = cfg.ae and cfg.ae.terminal }, pat)
+  return setmetatable({ cfg = cfg, term = cfg.ae and cfg.ae.terminal, zh = load_zh(cfg) }, pat)
 end
 
 function pat:terminal()
@@ -189,17 +210,36 @@ function pat:pattern_labels(stack)
   return outs, ins
 end
 
--- 这个样板是不是某作物的（产物名或种子输入名对得上）
+-- 这个样板是不是某作物的（产物名或种子输入名对得上，中英文都认）
 function pat:pattern_matches(stack, crop)
   local outs, ins = self:pattern_labels(stack)
-  for _, l in ipairs(outs) do if l == crop then return true end end
-  local seed = tostring(crop) .. "种子"
-  for _, l in ipairs(ins) do if l == seed then return true end end
+  local zhmap = self.zh or {}
+  local c = norm(zhmap, crop)
+  for _, l in ipairs(outs) do if norm(zhmap, l) == c then return true end end
+  for _, l in ipairs(ins) do if norm(zhmap, l) == c then return true end end
   return false
 end
 
--- 仓库里某种作物的样板槽号：先按样板产物/种子自动匹配，再退 config.pattern_slot
-function pat:slot_for(crop)
+-- 兜底：按物品身份（registry name + damage）认样板，名字是中文还是英文都无所谓。
+-- name 和 damage 都必须有值——只凭物品名会误配（各类种子共用一个 registry name，靠 damage 区分）。
+function pat:pattern_has_item(stack, want_name, want_damage)
+  if type(stack) ~= "table" or want_name == nil or want_damage == nil then return false end
+  local dmg = tonumber(want_damage)
+  local function hit(list)
+    if type(list) ~= "table" then return false end
+    for _, v in pairs(list) do
+      if type(v) == "table" and v.name == want_name and tonumber(v.damage) == dmg then
+        return true
+      end
+    end
+    return false
+  end
+  return hit(stack.outputs) or hit(stack.inputs)
+end
+
+-- 仓库里某种作物的样板槽号：先按样板产物/种子自动匹配，再退 config.pattern_slot。
+-- seedstack（可选）是这颗种子的真实物品栈，名字对不上时按 name+damage 兜底认样板。
+function pat:slot_for(crop, seedstack)
   local m = self.cfg.pattern_slot
   if m and m[crop] then return m[crop] end
   local wh = self:warehouse()
@@ -209,6 +249,12 @@ function pat:slot_for(crop)
   for _, slot in ipairs(sl) do
     local st = wh.patterns and wh.patterns[slot]
     if self:pattern_matches(st, crop) then return slot end
+  end
+  if type(seedstack) == "table" then
+    for _, slot in ipairs(sl) do
+      local st = wh.patterns and wh.patterns[slot]
+      if self:pattern_has_item(st, seedstack.name, seedstack.damage) then return slot end
+    end
   end
   if #sl == 1 then return sl[1] end
   return nil, string.format("仓库里有 %d 个样板，没找到「%s」的样板（样板产物名对不上；可在 config.lua 的 pattern_slot 里手动指定槽号）", #sl, tostring(crop))

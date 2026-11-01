@@ -895,7 +895,7 @@ local function advance_dq(f, stx)
   end
 
   if dq.step == "slot" then
-    local slot, serr = PAT:slot_for(dq.crop)
+    local slot, serr = PAT:slot_for(dq.crop, dq.seed)
     if not slot then
       abort_dq(f, stx, "拿不到样板槽位：" .. tostring(serr))
       return
@@ -1609,6 +1609,7 @@ local function advance_inner(f, stx, seeds, allSeed, prod, info, serr)
   local seedBefore = (seeds[asg.crop] and seeds[asg.crop].count) or 0
   stx.dq = {
     step = "slot", crop = asg.crop, n = asg.n, label = asg.out, mult = asg.mult,
+    seed = (seeds[asg.crop] and seeds[asg.crop].stack) or nil,
     batches = math.max(1, math.floor(asg.n / asg.mult)),
     seedBefore = seedBefore,
     t0 = upsec(),
