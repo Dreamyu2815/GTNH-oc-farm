@@ -206,7 +206,7 @@ local last_pulse = {}   -- [addr] = 上次脉冲结束的时刻（realsec）
 
 function farmio:pulse(addr, width, side)
   if not addr then return false, "没配置红石端口" end
-  local w = tonumber(width) or 0.1
+  local w = tonumber(width) or 0.05
   if w < 0.05 then w = 0.05 end
   if w > 0.2 then w = 0.2 end
 
