@@ -96,12 +96,11 @@ end
 
 local before = snap("之前")
 local width = (cfg.timing and cfg.timing.pulse_width) or 0.1
--- 只写朝向工具台的那一面；六面全写会让工具台收到 6 次邻居变化 → 连挥 6 下
 local side = tonumber(arg and arg[1]) or farm.redstone_side
 if side ~= nil then
   print("→ 发脉冲（单面 " .. side .. " 写 15，" .. tostring(width) .. " 秒）")
 else
-  print("→ 发脉冲（六面 15，" .. tostring(width) .. " 秒）—— 没配 redstone_side，会多挥")
+  print("→ 发脉冲（六面 15，" .. tostring(width) .. " 秒）—— 没配 redstone_side")
 end
 local pok, perr = F:pulse(rs, width, side)
 print("脉冲结果：" .. tostring(pok) .. " " .. tostring(perr))
