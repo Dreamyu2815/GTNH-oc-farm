@@ -215,18 +215,14 @@ function farmio:pulse(addr, width, side)
   local errs = write_all(addr, 0)
   if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
 
-  if side ~= nil then
-    local s = tonumber(side)
-    local ok, err = invoke(addr, "setOutput", s, 15)
-    if not ok then return false, string.format("面%d 写 15 失败：%s", s, tostring(err)) end
-    os.sleep(w)
-    invoke(addr, "setOutput", s, 0)
-    return true
-  end
-
-  write_all(addr, 15)
+  -- 只写一个面。六面全写时，每写一个面都向工具台发一次"邻居变化"，工具台会连挥，
+  -- 所以六面写 = 挥多下（这就是"短时间被触发两次"的根子）。side 没给就默认上表面(1)。
+  local s = tonumber(side)
+  if s == nil then s = 1 end
+  local ok, err = invoke(addr, "setOutput", s, 15)
+  if not ok then return false, string.format("面%d 写 15 失败：%s", s, tostring(err)) end
   os.sleep(w)
-  write_all(addr, 0)
+  invoke(addr, "setOutput", s, 0)
   return true
 end
 
