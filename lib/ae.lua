@@ -4,6 +4,14 @@
 local component = require("component")
 local util = require("lib.util")
 
+-- 英文名 -> 中文名（英文客户端/未本地化作物的 label 是英文时翻回中文）
+local okZh, zhMap = pcall(require, "crops_zh")
+local CROPS_ZH = (okZh and type(zhMap) == "table") and zhMap or {}
+local function zh(s)
+  local z = CROPS_ZH[s]
+  return z or s
+end
+
 local ae = {}
 ae.__index = ae
 
@@ -148,7 +156,7 @@ function ae:seeds_by_label(kind)
   for _, stack in ipairs(self:items(kind)) do
     if stack.name == "cropsnh:genericSeed" then
       local label = tostring(stack.label or "")
-      local name = (label:gsub("种子$", ""):gsub("%s+[Ss]eeds?$", ""))
+      local name = zh(label:gsub("种子$", ""):gsub("%s+[Ss]eeds?$", ""))
       local e = out[name]
       if not e then
         e = { count = 0, label = label, stack = stack }

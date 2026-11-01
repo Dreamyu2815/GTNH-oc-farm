@@ -78,7 +78,7 @@
 ## 五、文件说明
 
 - **运行必需**：main.lua、config.lua、set.lua、help.lua、backup.lua、reset.lua、
-  discover.lua、bind.lua、verify.lua、check.lua、setup.lua、crops.lua、crops_bed.lua、
+  discover.lua、bind.lua、verify.lua、check.lua、setup.lua、crops.lua、crops_bed.lua、crops_zh.lua、
   lib/（ae、pat、farmio、tasks、util、selfcheck、ui）.lua
 - **工具（可选）**：`tools/` 目录，按需拷到 `home/ocfarm` 使用
 - **运行时数据（自动生成，别拷贝）**：ae.dat、binds.dat、state.dat、tasks.dat、

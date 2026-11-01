@@ -90,7 +90,7 @@ lua main.lua      -- 启动；按 F1 开仪表盘
 
 ```
 main.lua config.lua setup.lua set.lua help.lua reset.lua backup.lua
-discover.lua bind.lua verify.lua crops.lua crops_bed.lua specs.lua check.lua
+discover.lua bind.lua verify.lua crops.lua crops_bed.lua crops_zh.lua specs.lua check.lua
 lib/{ae,farmio,pat,selfcheck,tasks,util,ui}.lua
 ```
 

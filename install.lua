@@ -19,7 +19,7 @@ local DEST = "/home/ocfarm"
 local FILES = {
   "main.lua", "config.lua", "setup.lua", "set.lua", "help.lua",
   "reset.lua", "backup.lua", "discover.lua", "bind.lua", "verify.lua",
-  "crops.lua", "crops_bed.lua", "specs.lua", "check.lua",
+  "crops.lua", "crops_bed.lua", "crops_zh.lua", "specs.lua", "check.lua",
   "lib/ae.lua", "lib/farmio.lua", "lib/pat.lua", "lib/selfcheck.lua",
   "lib/tasks.lua", "lib/util.lua", "lib/ui.lua",
 }

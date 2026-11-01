@@ -23,6 +23,14 @@ local selfcheck = loadmod("selfcheck")
 local tasksmod = loadmod("tasks")
 local cfg = dofile(ROOT .. "/config.lua")
 
+-- 英文名 -> 中文名（英文客户端/未本地化的作物 label 是英文时，显示统一翻回中文）
+local okZh, zhMap = pcall(dofile, ROOT .. "/crops_zh.lua")
+local CROPS_ZH = (okZh and type(zhMap) == "table") and zhMap or {}
+local function zh(s)
+  local z = CROPS_ZH[s]
+  return z or s
+end
+
 -- §9.1：农场地址/坐标以 binds.dat 为准（拆装方块会换新 UUID，config 里的旧地址不可信）。
 -- config.farms 只保留 redstone_side / enabled 这类行为参数，这里按 id 合到 binds 上。
 local function load_binds()
@@ -509,7 +517,7 @@ local function pattern_crop_info(st)
     end
   end
   if not seedLbl then return nil end
-  local crop = (seedLbl:gsub("种子$", ""):gsub("%s+[Ss]eeds?$", ""))
+  local crop = zh(seedLbl:gsub("种子$", ""):gsub("%s+[Ss]eeds?$", ""))
   return { crop = crop, product = product, mult = (mult or 0) > 0 and mult or 1, subsoil = subLbl }
 end
 
@@ -799,7 +807,7 @@ local function read_nets()
     if not e then e = { count = 0, name = s.name }; allSeed[label] = e end
     e.count = e.count + (s.size or 0)
     if s.name == "cropsnh:genericSeed" then
-      local cropName = label:gsub("种子$", "")
+      local cropName = zh(label:gsub("种子$", ""):gsub("%s+[Ss]eeds?$", ""))
       local q = seeds[cropName]
       if not q then q = { count = 0, label = label, stack = s }; seeds[cropName] = q end
       q.count = q.count + (s.size or 0)

@@ -338,6 +338,9 @@ for idx, bind in ipairs(binds.farms) do
     if tonumber(cw) and tonumber(cw) >= 1 then
       say("[发配] %s 合成 CPU 空出来了（等了 %.0f 秒）", label, tonumber(cw))
     end
+    local before = 0
+    local sdb = A:seeds_by_label("seed")[crop]
+    if sdb then before = sdb.count or 0 end
     local job, jerr = A:request("seed", out, mult)
     if not job then
       say("[FAIL] %s 下单失败：%s", label, tostring(jerr))
@@ -345,14 +348,14 @@ for idx, bind in ipairs(binds.farms) do
     end
     say("[下单] %s %s ×%d", label, tostring(out), mult)
 
-    -- 6) 给输入总线吸种时间（4s 基础 + 0.25s × 份数）
-    local dw = 4 + 0.25 * 1
-    say("[等待] %s 再给输入总线 %.1f 秒吸种", label, dw)
-    local t0 = computer.uptime()
-    while computer.uptime() - t0 < dw do
-      if check_q() then say("[退出]"); return end
-      os.sleep(0.5)
+    -- 6) 等 CPU 任务发配完成 + 1 秒（和 main.lua 同步：不再猜 4.25 秒）
+    local ddone, dmsg, del = wait_dispatched(job, crop, before, mult, 300)
+    if not ddone then
+      say("[FAIL] %s 发配没完成：%s（已等 %.0f 秒）", label, tostring(dmsg), del or 0)
+      goto move_back
     end
+    say("[发配] %s CPU 任务完成（%.0f 秒），再等 1 秒让输入总线吸完", label, del)
+    os.sleep(1)
 
     -- 7) 脉冲切 Farm
     local side = nil
@@ -365,6 +368,18 @@ for idx, bind in ipairs(binds.farms) do
       goto move_back
     end
     say("[脉冲] %s 切 Farm（面 %s）", label, tostring(side))
+
+    -- 刷新工作开关（关→开），和 main.lua 一致：防"切 Farm 后机器不开工"卡生长
+    os.sleep(0.3)
+    local rk, rr = F:set_work_allowed(bind.gt, false)
+    if rk then
+      os.sleep(0.5)
+      F:set_work_allowed(bind.gt, true)
+      os.sleep(0.3)
+      say("[刷新] %s 已自动关→开工作开关", label)
+    else
+      say("[警告] %s 切工作开关失败（%s），跳过刷新", label, tostring(rr))
+    end
 
     -- 8) 等农场开工（从输入切到 Farm 后有时要 5 秒以上才真正开始跑，给足 60 秒）
     local worked, wmsg = wait_work(bind.gt, 60)
