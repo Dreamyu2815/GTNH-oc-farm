@@ -6,13 +6,32 @@
 --   lua set.lua bed 2 5      按编号设苗床需求（0=无要求）
 --   lua set.lua del 2        删除 2 号的覆盖（回 config.lua 默认）
 --   lua set.lua list         只列出，不改
---   lua set.lua side 2 4     把 2 号农场的红石端口绑到西面（0=下 1=上 2=北 3=南 4=西 5=东）
 -- 说明：写入 /home/ocfarm/limits.dat；main.lua 每个轮询周期自动重读，无需重启。
 -- 防呆：改之前建议先跑 lua backup.lua 存个快照（改坏能回退）；全部命令见 lua help.lua。
 local ROOT = "/home/ocfarm"
 local util = dofile(ROOT .. "/lib/util.lua")
 local FILE = ROOT .. "/limits.dat"
 local cf = dofile(ROOT .. "/config.lua")
+
+-- config.lua 里的 ae 段 / priority 段已经迁出（ae.dat 由 setup.lua 生成，priority.dat 由 lua set.lua prio 生成）。
+-- 这里跟 main.lua 一样合并进来，否则独立运行 set.lua 会「没有作物」。
+do
+  local ae = util.load(ROOT .. "/ae.dat", nil)
+  if type(ae) == "table" then
+    cf.ae = cf.ae or {}
+    for k, v in pairs(ae) do if k ~= "seq" then cf.ae[k] = v end end
+  end
+  local pr = util.load(ROOT .. "/priority.dat", nil)
+  if type(pr) == "table" and type(pr.layers) == "table" then
+    cf.priority = pr.layers
+  end
+end
+
+-- 苗床需求（与 main.lua 同源：crops_bed.lua；limits.dat 的覆盖优先）
+local BED = (function()
+  local ok, m = pcall(dofile, ROOT .. "/crops_bed.lua")
+  return (ok and type(m) == "table") and m or {}
+end)()
 
 -- 收参数（chunk varargs + 全局 arg）
 local args = {}
@@ -43,6 +62,8 @@ if type(cf.crops) == "table" then
   table.sort(rest)
   for _, c in ipairs(rest) do add_crop(c) end
 end
+-- limits.dat 里出现过的作物也列出来（以前设过、现在没种子的也能改回来）
+for c in pairs(t.t or {}) do add_crop(c) end
 
 -- 种子网络里已有的种子也算作物（主程序 auto_config 认到的可能还没写进 config.lua，
 -- 这里直接列出来，默认 low=64/high=512，也能直接改）
@@ -72,7 +93,7 @@ local function cur(crop)
   return {
     low = math.floor(tonumber(o.low or th.low) or 64),
     high = math.floor(tonumber(o.high or th.high) or 512),
-    bed = math.floor(tonumber(o.bed or ci.bed) or 0),
+    bed = math.floor(tonumber(o.bed) or (BED[crop] and BED[crop].bed) or ci.bed or 0),
     product = th.product or ci.out or crop,
     over = (o.low ~= nil or o.high ~= nil or o.bed ~= nil),
   }
@@ -81,7 +102,7 @@ end
 local function show_list()
   print("======== 作物阈值设置 ========")
   if #list == 0 then
-    print("（没有作物：config.lua 的 priority / crops 是空的）")
+    print("（没有作物：priority.dat / ae.dat 都读不到，先跑 lua setup.lua，或确认种子网里有种子）")
     return
   end
   for i, c in ipairs(list) do
