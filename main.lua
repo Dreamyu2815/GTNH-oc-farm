@@ -1819,6 +1819,19 @@ local ok, err = pcall(function()
       alarm_t = upsec()
       local warns = {}
       local seenW = {}
+      -- 场上农场等级一览：某作物要求的苗床等级比所有农场都高 → 结构性缺配（永远发不出去），必须进告警
+      local maxlv, lvKnown, lvparts = 0, 0, {}
+      for _, ff in ipairs(cfg.farms) do
+        if ff.enabled ~= false then
+          local lv = sinfo[ff.id] and tonumber(sinfo[ff.id].level) or nil
+          if lv then
+            lvKnown = lvKnown + 1
+            if lv > maxlv then maxlv = lv end
+            lvparts[#lvparts + 1] = string.format("%d:%s", ff.id, tostring(lv))
+          end
+        end
+      end
+      lvparts = table.concat(lvparts, " ")
       for _, layer in ipairs(cfg.priority) do
         for _, crop in ipairs(layer) do
           if not seenW[crop] then
@@ -1859,6 +1872,13 @@ local ok, err = pcall(function()
               if shortSub then parts[#parts + 1] = string.format("垫块「%s」剩 %d", ciW.subsoil, totalSub) end
               warns[#warns + 1] = string.format("%s 凑不齐一份（%d）：%s；补料后自动恢复",
                 crop, multW, table.concat(parts, "、"))
+            end
+            -- 苗床等级：场上一台够格的农场都没有，这个作物永远接不了单 —— 明说，别让人干等
+            local bedW = math.floor(tonumber(ciW.bed) or 0)
+            if bedW > 0 and lvKnown > 0 and maxlv < bedW and (sc + inflightW + plantedW) > 0 then
+              warns[#warns + 1] = string.format(
+                "%s 需要苗床等级 %d，场上一台够格的农场都没有（最高 %s，%s）；造够级农场，或 lua set.lua bed <编号> %d 降要求",
+                crop, bedW, tostring(maxlv), lvparts, bedW)
             end
           end
         end
