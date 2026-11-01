@@ -224,6 +224,10 @@ end
 -- name 和 damage 都必须有值——只凭物品名会误配（各类种子共用一个 registry name，靠 damage 区分）。
 function pat:pattern_has_item(stack, want_name, want_damage)
   if type(stack) ~= "table" or want_name == nil or want_damage == nil then return false end
+  -- cropsnh:genericSeed 这类种子全部共用同一个 registry name、damage 也都一样，
+  -- 按 name+damage 认样板会把「任何带种子的样板」都认成自己（实测：Oak Bonsai 认成了
+  -- Glowstone Dust 的样板）。这类种子只能走样板输入名匹配（pattern_matches）。
+  if tostring(want_name):find("genericSeed", 1, true) then return false end
   local dmg = tonumber(want_damage)
   local function hit(list)
     if type(list) ~= "table" then return false end

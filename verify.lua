@@ -125,8 +125,13 @@ local function wait_dispatched(job, crop, before, n, limit)
     local el = computer.uptime() - t0
     if el >= (limit or 300) then return false, "超时", el end
     if check_q() then return false, "用户退出", el end
-    local okh, hasf = pcall(function() return job:hasFailed() end)
-    if okh and hasf == true then return false, "任务标记失败", el end
+    local okh, hasf, whyf = pcall(function() local a, b = job:hasFailed() return a, b end)
+    if okh and hasf == true then
+      -- AE 集成里 hasFailed 常带默认占位 reason「no link」，那种不是真失败（真失败是
+      -- request failed (...)）。和 main.lua 同一判据：只有 request failed 才算失败。
+      local realfail = tostring(whyf or ""):find("request failed", 1, true) ~= nil
+      if realfail then return false, "任务失败（" .. tostring(whyf) .. "）", el end
+    end
     local okd, done = pcall(function() return job:isDone() end)
     if okd and done == true then return true, "job 已发配完成", el end
     if el - last_read >= 2 then
@@ -171,7 +176,8 @@ local function dump_state(tag, gt)
     if type(info) == "string" then info = { info } end
     for _, line in ipairs(info or {}) do
       local s = tostring(line):gsub("\194\167.", "")
-      if s:find("进度") or s:find("问题") or s:find("耗水") or s:find("营养") then
+      if s:find("进度") or s:find("问题") or s:find("耗水") or s:find("营养")
+        or s:find("rogress") or s:find("roblem") or s:find("ater") or s:find("utrition") then
         say("[诊断]   | %s", s)
       end
     end
@@ -220,15 +226,15 @@ local function testable(crop, seeds)
   local mult = ci and ci.mult
   if not out then out, mult = product_for(crop, e and e.stack) end
   if not out then return nil end
-  return out, (mult or 0) > 0 and mult or 1
+  return out, (mult or 0) > 0 and mult or 1, e.stack
 end
 
 local function pick_crop()
   local seeds = A:seeds_by_label("seed")
   if CROP_ARG then
-    local out, m = testable(CROP_ARG, seeds)
-    if out then return CROP_ARG, out, m end
-    return nil, nil, nil, CROP_ARG
+    local out, m, stk = testable(CROP_ARG, seeds)
+    if out then return CROP_ARG, out, m, stk end
+    return nil, nil, nil, nil, CROP_ARG
   end
   local names = {}
   for name, e in pairs(seeds) do
@@ -236,10 +242,10 @@ local function pick_crop()
   end
   table.sort(names)
   for _, name in ipairs(names) do
-    local out, m = testable(name, seeds)
-    if out then return name, out, m end
+    local out, m, stk = testable(name, seeds)
+    if out then return name, out, m, stk end
   end
-  return nil, nil, nil, nil
+  return nil, nil, nil, nil, nil
 end
 
 local binds = util.load(BINDS, { seq = 0, farms = {} })
@@ -248,7 +254,7 @@ if type(binds.farms) ~= "table" or #binds.farms == 0 then
   return
 end
 
-local crop, out, mult, want = pick_crop()
+local crop, out, mult, seedstack, want = pick_crop()
 if not crop then
   local seeds = A:seeds_by_label("seed")
   local avail = {}
@@ -275,7 +281,7 @@ if not wh then
   say("[错误] 找不到仓库接口（config.ae.warehouse_name 或空名字接口）。")
   return
 end
-local src_slot = PAT:slot_for(crop)
+local src_slot = PAT:slot_for(crop, seedstack)
 if not src_slot then
   say("[错误] 仓库样板槽找不到：%s", tostring(crop))
   return
@@ -300,6 +306,12 @@ for idx, bind in ipairs(binds.farms) do
       goto continue
     end
     say("[OK] %s 等级=%s 容量=%s", label, tostring(info.level), tostring(info.capacity))
+    if info.level == nil then
+      say("[提示] %s 传感器文本里没识别到容量（中文「容量」/English「capacity」都试过了），原文前几行：", label)
+      for i = 1, math.min(#(info.lines or {}), 4) do
+        say("[提示]    | %s", tostring(info.lines[i]))
+      end
+    end
 
     -- 2) 红石可写
     local rok, rerr = F:test_redstone(bind.redstone)
@@ -414,12 +426,18 @@ for idx, bind in ipairs(binds.farms) do
     end -- do
 
     ::move_back::
-    -- 10) 样板搬回仓库
+    -- 10) 样板搬回仓库：优先放回原槽（其它槽可能已占），失败再放第一个空槽。
+    --     之前固定放 0 号槽：仓库多样板时 0 号已占 → 搬回失败 → 样板卡在农场，
+    --     下一台再从原槽搬就是空的（这就是 #2~#6「返回 false」的来源）。
     local cur = PAT:entry_by_loc({ location = { x = bind.iface.x, y = bind.iface.y, z = bind.iface.z, dimension = bind.iface.dimension } })
     if cur and PAT:count(cur) > 0 then
       for _, sl in ipairs(PAT:slots(cur)) do
-        local bok = PAT:move(cur, sl, wh)
-        if bok then say("[搬样] %s 样板已搬回仓库", label) end
+        local bok = PAT:move(cur, sl, wh, src_slot)
+        if not bok then
+          local free = PAT:free_slot(wh)
+          if free ~= nil then bok = PAT:move(cur, sl, wh, free) end
+        end
+        if bok then say("[搬样] %s 样板已搬回仓库（槽 %d）", label, src_slot) end
       end
     end
 

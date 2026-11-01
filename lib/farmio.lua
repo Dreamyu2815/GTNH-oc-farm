@@ -74,11 +74,13 @@ function farmio:read_sensor(gt_addr)
   local info = { lines = res }
   for _, line in ipairs(res) do
     local plain = strip(line)
-    if not info.capacity and plain:find("容量", 1, true) then
-      info.capacity = first_number(plain:match("容量(.*)$") or "")
+    local low = plain:lower()
+    -- 中英文都要认：单人档是中文，多人服（服务端 language=en_US）发来的物品/提示是英文。
+    if not info.capacity and (plain:find("容量", 1, true) or low:find("capacity", 1, true)) then
+      info.capacity = first_number(plain:match("容量(.*)$") or plain:match("[Cc]apacity(.*)$") or "")
     end
-    if not info.water and plain:find("耗水量", 1, true) then
-      info.water = first_number(plain:match("耗水量(.*)$") or "")
+    if not info.water and (plain:find("耗水", 1, true) or low:find("water", 1, true)) then
+      info.water = first_number(plain:match("耗水(.*)$") or plain:match("[Ww]ater(.*)$") or "")
     end
   end
   info.level = farmio.level_from_capacity(info.capacity)
