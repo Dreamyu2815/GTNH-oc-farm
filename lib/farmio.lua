@@ -200,16 +200,21 @@ end
 
 -- 一次脉冲 = 工具台挥一下
 -- 两个坑：
--- ① 脉冲宽度要短（>0.1 秒工具台会连挥好几次，Input 直接跳到 Output）；
--- ② **只能写一个面**。六面全写时，每写一个面都会向工具台发一次"邻居变化"，
---    而 TT 的 onNeighborBlockChange 每收到一次、只要还被充能就会再挥一次，
---    所以六面写 = 挥 6 下（这就是你看到"触发两次红石信号"的原因）。
---    side 给出时只写那一个面；不给才退回旧的六面写法（会多挥，仅作兼容）。
+-- ① 脉冲宽度要短（>0.2 秒工具台会连挥好几次，Input 直接跳到 Output）；
+-- ② 两次短间隔的红石脉冲会把活化工具台重置（用户实测）→ 下面按红石端口做 ≥1 秒间隔保护。
+local last_pulse = {}   -- [addr] = 上次脉冲结束的时刻（realsec）
+
 function farmio:pulse(addr, width, side)
   if not addr then return false, "没配置红石端口" end
   local w = tonumber(width) or 0.1
   if w < 0.05 then w = 0.05 end
   if w > 0.2 then w = 0.2 end
+
+  -- 间隔保护：距离这个端口上一次脉冲不足 1 秒，先睡满，避免把工具台重置
+  local gap = realsec() - (last_pulse[addr] or 0)
+  if gap < 1 then
+    os.sleep(1 - gap)
+  end
 
   -- 先把所有面拉回 0，保证下面是一次干净的上升沿
   local errs = write_all(addr, 0)
@@ -221,12 +226,12 @@ function farmio:pulse(addr, width, side)
     if not ok then return false, string.format("面%d 写 15 失败：%s", s, tostring(err)) end
     os.sleep(w)
     invoke(addr, "setOutput", s, 0)
-    return true
+  else
+    write_all(addr, 15)
+    os.sleep(w)
+    write_all(addr, 0)
   end
-
-  write_all(addr, 15)
-  os.sleep(w)
-  write_all(addr, 0)
+  last_pulse[addr] = realsec()
   return true
 end
 
