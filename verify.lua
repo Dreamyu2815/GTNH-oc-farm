@@ -33,10 +33,6 @@ local computer = require("computer")
 local cfg = dofile(ROOT .. "/config.lua")
 local util = loadmod("util")
 util.merge_ae(cfg, ROOT)   -- 网络地址以 ae.dat 为准
--- 红石端口热改 farms.dat（lua set.lua side 写入）：和 main.lua 一样按 id 覆盖。
--- 否则只认 config.lua 静态 farms（只有 id=1），服务器上后绑的农场 side=nil →
--- 脉冲退回六面写 → 活化工具台连挥 → 就是"刷新状态/被触发两次"的问题。
-local FARMS_DAT = util.load(ROOT .. "/farms.dat", nil)
 local farmio = loadmod("farmio")
 local aemod = loadmod("ae")
 local patmod = loadmod("pat")
@@ -379,13 +375,9 @@ for idx, bind in ipairs(binds.farms) do
     os.sleep(1)
 
     -- 7) 脉冲切 Farm
-    local side = 1   -- 默认上表面（config.lua 约定），绝不 nil → 六面写
+    local side = nil
     for _, f in ipairs(cfg.farms or {}) do
-      if f.gt == bind.gt or f.id == bind.id then side = f.redstone_side or 1 end
-    end
-    if type(FARMS_DAT) == "table" and type(FARMS_DAT.farms) == "table" then
-      local o = FARMS_DAT.farms[tostring(bind.id)]
-      if type(o) == "table" and o.redstone_side ~= nil then side = o.redstone_side end
+      if f.gt == bind.gt or f.id == bind.id then side = f.redstone_side end
     end
     local pok, perr = F:pulse(bind.redstone, cfg.timing.pulse_width, side)
     if not pok then
