@@ -5,7 +5,7 @@
 --    lua bind.lua             全量绑定（已绑定的跳过，未绑定的从前往后问）
 --    lua bind.lua fix <id>    只重绑第 <id> 台（id 是排序后的编号）
 --    lua bind.lua show        只看当前绑定，不操作
---    lua bind.lua edit        绑定完再改：列出现有的，选一台改朝向/重绑红石/删除
+--    lua bind.lua edit        绑定完再改：列出现有的，选一台重绑红石/删除
 --
 --  键盘（只在"等你拔插端口"的时候有效）：
 --    双击 u   撤销上一台，重新绑它
@@ -58,7 +58,7 @@ local MODE = "all"
 local FIX_ID = nil
 for _, a in ipairs(ARGS) do
   local s = tostring(a)
-  if s == "show" or s == "coords" or s == "fix" or s == "all" or s == "clear" or s == "edit" or s == "clearside" then
+  if s == "show" or s == "coords" or s == "fix" or s == "all" or s == "clear" or s == "edit" then
     MODE = s
   end
 end
@@ -274,40 +274,6 @@ local function show_manual(list)
   print("  按数字选一个绑给这台；再按 m 刷新列表")
 end
 
--- ============ 红石朝向（直接手动选，不跑脉冲扫描） ============
-local SIDE_NAMES_BIND = {
-  [0] = "0=下(bottom)", [1] = "1=上(top)",
-  [2] = "2=北(north)",  [3] = "3=南(south)",
-  [4] = "4=西(west)",   [5] = "5=东(east)",
-}
-
-local function side_name(n)
-  if type(n) == "number" and n >= 0 and n <= 5 then return SIDE_NAMES_BIND[n] end
-  return "六面全写(未设)"
-end
-
--- 手动选朝向：直接输入 0..5；回车 = 保持当前（编辑时）或 不设（新绑时）
-local function choose_side(current)
-  print("")
-  print("红石朝向：哪一面贴着活化工具台？")
-  if current ~= nil then
-    print("  0下 1上 2北 3南 4西 5东，回车 = 保持当前（" .. side_name(current) .. "）")
-  else
-    print("  0下 1上 2北 3南 4西 5东，回车 = 不设（六面全写）")
-  end
-  io.write("> ")
-  local line = io.read("*l")
-  line = line and tostring(line):gsub("^%s+", ""):gsub("%s+$", "")
-  if line == "" then return current end
-  local n = tonumber(line)
-  if n and n >= 0 and n <= 5 then
-    say("[朝向] 记录：面 %s", SIDE_NAMES_BIND[n])
-    return n
-  end
-  say("[朝向] 输入无效，按不设处理（六面全写）。")
-  return nil
-end
-
 local function wait_redstone(label)
   flush_signals()
   local prev = addr_set(redstone_addrs())
@@ -430,8 +396,8 @@ end
 local function list_binds()
   say("当前已绑定 %d 台农场：", #binds.farms)
   for i, f in ipairs(binds.farms) do
-    say("  #%d gt=%s redstone=%s 朝向=%s 接口=%s",
-      i, tostring(f.gt), tostring(f.redstone), side_name(f.redstone_side), tostring(f.iface_name))
+    say("  #%d gt=%s redstone=%s 接口=%s",
+      i, tostring(f.gt), tostring(f.redstone), tostring(f.iface_name))
   end
 end
 
@@ -455,16 +421,12 @@ local function edit_menu()
     else
       local rec = binds.farms[idx]
       local label = string.format("#%d 控制器(%s,%s,%s)", idx, tostring(rec.x), tostring(rec.y), tostring(rec.z))
-      say("正在改 %s（红石 %s，朝向 %s）", label, tostring(rec.redstone), side_name(rec.redstone_side))
-      print("  1) 改朝向   2) 重绑红石端口   3) 删除这台   其它/回车 = 返回")
+      say("正在改 %s（红石 %s）", label, tostring(rec.redstone))
+      print("  1) 重绑红石端口   2) 删除这台   其它/回车 = 返回")
       io.write("> ")
       local op = io.read("*l")
       op = op and tostring(op):gsub("^%s+", ""):gsub("%s+$", "")
       if op == "1" then
-        rec.redstone_side = choose_side(rec.redstone_side)
-        save_binds()
-        say("[保存] %s 朝向 -> %s", label, side_name(rec.redstone_side))
-      elseif op == "2" then
         local act, val = wait_redstone(label .. "（重绑红石）")
         if act == "bind" then
           local dup = find_bind_by_redstone(val)
@@ -472,14 +434,13 @@ local function edit_menu()
             say("[错误] 这个端口已经绑给别的农场了，没改。")
           else
             rec.redstone = val
-            rec.redstone_side = choose_side()
             save_binds()
-            say("[保存] %s 红石 -> %s，朝向 -> %s", label, tostring(val), side_name(rec.redstone_side))
+            say("[保存] %s 红石 -> %s", label, tostring(val))
           end
         else
           say("[取消] 没重绑。")
         end
-      elseif op == "3" then
+      elseif op == "2" then
         table.remove(binds.farms, idx)
         save_binds()
         say("[删除] 已删除 #%d。", idx)
@@ -569,16 +530,6 @@ if MODE == "edit" then
   return
 end
 
-if MODE == "clearside" then
-  local n = 0
-  for _, f in ipairs(binds.farms) do
-    if f.redstone_side ~= nil then f.redstone_side = nil; n = n + 1 end
-  end
-  save_binds()
-  say("[清朝向] 已把 %d 台农场的红石朝向清空（全部回到六面全写）。", n)
-  return
-end
-
 local farms = discover()
 say("发现 %d 台农场（按坐标排序）：", #farms)
 for i, f in ipairs(farms) do
@@ -646,13 +597,11 @@ while i <= #farms do
         say("[错误] 这个端口已经绑给其它农场了（gt %s）。请换一个端口，或双击 u 撤销。", tostring(dup.gt))
       else
         local loc = f.iface and f.iface.location
-        local side = choose_side()
         local rec = {
           id = i,
           gt = f.gt,
           x = f.x, y = f.y, z = f.z, dimension = f.dimension,
           redstone = val,
-          redstone_side = side,
           iface_name = iface_name(f.iface),
           iface = (loc and type(loc) == "table") and {
             x = loc.x, y = loc.y, z = loc.z, dimension = loc.dimId or loc.dimension or 0
@@ -682,10 +631,9 @@ while #skipped > 0 do
     elseif act == "save" then save_binds(); say("[保存] 已保存，退出绑定向导。"); return
     elseif act == "bind" then
       local loc = f.iface and f.iface.location
-      local side = choose_side()
       local rec = {
         id = idx, gt = f.gt, x = f.x, y = f.y, z = f.z, dimension = f.dimension,
-        redstone = val, redstone_side = side, iface_name = iface_name(f.iface),
+        redstone = val, iface_name = iface_name(f.iface),
         iface = (loc and type(loc) == "table") and { x = loc.x, y = loc.y, z = loc.z, dimension = loc.dimId or loc.dimension or 0 } or nil,
       }
       binds.farms[#binds.farms + 1] = rec
@@ -700,8 +648,8 @@ say("")
 say("========== 绑定完成 ==========")
 say("共绑定 %d 台农场：", #binds.farms)
 for i, f in ipairs(binds.farms) do
-  say("  #%d gt=%s redstone=%s 朝向=%s 接口=%s", i, tostring(f.gt), tostring(f.redstone), side_name(f.redstone_side), tostring(f.iface_name))
+  say("  #%d gt=%s redstone=%s 接口=%s", i, tostring(f.gt), tostring(f.redstone), tostring(f.iface_name))
 end
-say("绑定结束，进入编辑菜单（改朝向 / 重绑红石 / 删除；q 结束）。")
+say("绑定结束，进入编辑菜单（重绑红石 / 删除；q 结束）。")
 edit_menu()
 say("下一步：跑 lua verify.lua 实测每台的红石端口（发一批种子、脉冲、看 hasWork）。")

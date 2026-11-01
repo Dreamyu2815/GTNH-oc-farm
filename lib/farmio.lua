@@ -177,24 +177,16 @@ function farmio:set_work_allowed(gt_addr, on)
   return false, tostring(err)
 end
 
--- 红石端口：六个面逐个写（该版 redstone 的 setOutput 必须带 side，直接
--- setOutput(15) 会被当成"只给了 side 没给值"而报错）
-local SIDES = { 0, 1, 2, 3, 4, 5 }
+-- 红石端口：写死「只向上发信号（side=1）」。用户实测（2026-11-01）：红石 I/O 摆在
+-- 活化工具台正下方、只朝上发，触发最稳；六面全写/朝向选择都不稳定，已回退。
+-- 注意：这版 redstone 的 setOutput 必须带 side。
+local RS_UP = 1
 
-local function write_all(addr, value)
-  local errs = {}
-  for _, s in ipairs(SIDES) do
-    local ok, err = invoke(addr, "setOutput", s, value)
-    if not ok then errs[#errs + 1] = string.format("面%d=%s", s, tostring(err)) end
-  end
-  return errs
-end
-
--- 开跑前的自检：能不能写红石（全部置 0，安全）
+-- 开跑前的自检：能不能写红石（向上那面置 0，安全）
 function farmio:test_redstone(addr)
   if not addr then return false, "没配置红石端口" end
-  local errs = write_all(addr, 0)
-  if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
+  local ok, err = invoke(addr, "setOutput", RS_UP, 0)
+  if not ok then return false, "红石端口写不进去（向上那面）：" .. tostring(err) end
   return true
 end
 
@@ -216,24 +208,12 @@ function farmio:pulse(addr, width, side)
     os.sleep(1 - gap)
   end
 
-  -- side 是有效朝向（0..5）时，只写那一面（bind.lua 测好朝向、写进 binds.dat 的农场走这里）。
-  -- side 为 nil 时退回「六面全写」（朝向未知的默认，也是回退路径）。
-  if type(side) == "number" and side >= 0 and side <= 5 then
-    local ok0, e0 = invoke(addr, "setOutput", side, 0)
-    if not ok0 then return false, "红石端口写不进去（面" .. tostring(side) .. "）：" .. tostring(e0) end
-    invoke(addr, "setOutput", side, 15)
-    os.sleep(w)
-    invoke(addr, "setOutput", side, 0)
-  else
-    -- 先把所有面拉回 0，保证下面是一次干净的上升沿
-    local errs = write_all(addr, 0)
-    if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
-
-    -- 默认「六面全写」：不管朝向是哪一面，贴着工具台的那面一定能收到（用户要求，2026-11-01）
-    write_all(addr, 15)
-    os.sleep(w)
-    write_all(addr, 0)
-  end
+  -- 写死只写向上那一面（红石端口摆在活化工具台正下方）
+  local ok0, e0 = invoke(addr, "setOutput", RS_UP, 0)
+  if not ok0 then return false, "红石端口写不进去（向上那面）：" .. tostring(e0) end
+  invoke(addr, "setOutput", RS_UP, 15)
+  os.sleep(w)
+  invoke(addr, "setOutput", RS_UP, 0)
   last_pulse[addr] = realsec()
   return true
 end

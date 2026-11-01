@@ -55,7 +55,7 @@ local function merge_farms(binds_farms)
       iface          = b.iface,
       iface_name     = b.iface_name,
       interface_name = b.iface_name,           -- pat.lua 按这个名字认下单接口
-      redstone_side  = (b.redstone_side ~= nil) and b.redstone_side or beh.redstone_side,   -- binds.dat 里测好的朝向优先；nil = 六面全写
+      redstone_side  = beh.redstone_side,   -- 弃用：farmio 已写死只向上发，side 参数不再使用
       enabled        = (beh.enabled == nil) and true or beh.enabled,
     }
   end
