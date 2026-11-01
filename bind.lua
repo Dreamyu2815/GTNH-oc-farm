@@ -58,7 +58,7 @@ local MODE = "all"
 local FIX_ID = nil
 for _, a in ipairs(ARGS) do
   local s = tostring(a)
-  if s == "show" or s == "coords" or s == "fix" or s == "all" or s == "clear" or s == "edit" then
+  if s == "show" or s == "coords" or s == "fix" or s == "all" or s == "clear" or s == "edit" or s == "clearside" then
     MODE = s
   end
 end
@@ -566,6 +566,16 @@ end
 
 if MODE == "edit" then
   edit_menu()
+  return
+end
+
+if MODE == "clearside" then
+  local n = 0
+  for _, f in ipairs(binds.farms) do
+    if f.redstone_side ~= nil then f.redstone_side = nil; n = n + 1 end
+  end
+  save_binds()
+  say("[清朝向] 已把 %d 台农场的红石朝向清空（全部回到六面全写）。", n)
   return
 end
 
