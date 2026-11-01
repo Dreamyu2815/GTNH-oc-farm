@@ -486,6 +486,15 @@ while i <= #farms do
 
   local k, existing = find_bind_by_gt(f.gt)
   local need_rebind = (MODE == "fix" and i == FIX_ID)
+  -- 已绑定的农场：红石端口还在当前网络里才跳过；拆装过红石（地址失效）要重绑
+  if existing and not need_rebind then
+    local live_set = addr_set(redstone_addrs())
+    local alive = (existing.redstone ~= nil) and (live_set[existing.redstone] == true)
+    if not alive then
+      say("[重绑] %s 已绑定，但红石端口 %s 不在当前网络里（拆装过？），重新检测这台的红石口", label, tostring(existing.redstone))
+      existing = nil   -- 保留 k，重绑时会原地替换旧记录
+    end
+  end
   if existing and not need_rebind then
     say("[跳过] %s 已绑定（红石 %s）", label, tostring(existing.redstone))
     i = i + 1

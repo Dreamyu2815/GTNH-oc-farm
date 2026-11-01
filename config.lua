@@ -42,11 +42,11 @@ return {
   -- 农场地址/坐标不写在这里：由 /home/ocfarm/binds.dat 权威提供（lua bind.lua 生成）。
   -- 拆装方块会换新 UUID，所以 gt / redstone / 下单接口名都以 binds.dat 为准。
   -- 这里只按 id 放「行为参数」，开机时 main.lua 把它们合到 binds 的地址/坐标上：
-  --   redstone_side  端口朝向工具台的那一面（0=下 1=上 2=后 3=前 4=右 5=左），默认 1
   --   enabled        这台是否参与调度，默认 true
-  -- 没列出的农场一律用默认值（redstone_side=1、enabled=true）。
+  -- 红石脉冲默认「六面全写」，不用绑朝向。
+  -- 没列出的农场一律用默认值（enabled=true）。
   farms = {
-    { id = 1, redstone_side = 1, enabled = true },
+    { id = 1, enabled = true },
   },
 
   timing = {

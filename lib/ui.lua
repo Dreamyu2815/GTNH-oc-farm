@@ -217,7 +217,6 @@ local function cmd_help(u)
   log [N]     最近 N 行日志（默认 12）
   cal         校准时钟（realTime 与 os.time 对照）
   prio        优先级分层（编号：prio 3 1 = 3号挪第1层；prio 3 0 = 不种）
-  side        绑定红石端口（side 2 4 = 农场2西面）
   set         改阈值（set 看列表；set 3 low 128 / set 3 high 512）
   backup      配置快照（backup / backup list / backup restore <名> yes）
   dash off    关仪表盘（F1 再开）
@@ -365,34 +364,7 @@ local function cmd_prio(u, arg)
   u:term(string.format("%s → 第%d层（一个轮询周期内生效）", row.crop, ln))
 end
 
--- ---- 终端热命令：红石端口（写 farms.dat，main 轮询自动生效）----
-local SIDE_NAME = { "下(0)", "上(1)", "北(2)", "南(3)", "西(4)", "东(5)" }
-local function cmd_side(u, arg)
-  if not u.util then u:term("（util 加载失败，无法读写 farms.dat）") return end
-  local ft = u.util.load(u.ROOT .. "/farms.dat", nil)
-  if type(ft) ~= "table" or type(ft.farms) ~= "table" then ft = { farms = {}, seq = 0 } end
-  ft.farms = ft.farms or {}
-  ft.seq = tonumber(ft.seq) or 0
-  if not arg or arg == "" then
-    if next(ft.farms) == nil then
-      u:term("还没有红石端口覆盖（默认面 1=上）")
-    else
-      for id, o in pairs(ft.farms) do
-        u:term(string.format("农场 %s：红石端口 %s", tostring(id), SIDE_NAME[tonumber(o.redstone_side) + 1] or tostring(o.redstone_side)))
-      end
-    end
-    u:term("用法：side <农场号> <面0..5>  （0下 1上 2北 3南 4西 5东）")
-    return
-  end
-  local sid, sside = arg:match("^(%d+)%s+(%d+)$")
-  if not sid then u:term("用法：side <农场号> <面0..5>") return end
-  sside = tonumber(sside)
-  if sside < 0 or sside > 5 then u:term("面号范围 0..5，没改") return end
-  ft.farms[sid] = { redstone_side = sside }
-  ft.seq = ft.seq + 1
-  u.util.save(u.ROOT .. "/farms.dat", ft)
-  u:term(string.format("已设置农场 %s：红石端口 %s（一个轮询周期内生效）", sid, SIDE_NAME[sside + 1]))
-end
+-- ---- 红石端口朝向已取消：脉冲默认「六面全写」，不再提供 side 命令 ----
 
 -- ---- 终端热命令：改阈值 low/high（写 limits.dat，main 轮询自动生效）----
 local function ui_load_limits(u)
@@ -533,7 +505,6 @@ local function run_cmd(u, line)
   elseif cmd == "log" then cmd_log(u, arg)
   elseif cmd == "cal" then cmd_cal(u)
   elseif cmd == "prio" then cmd_prio(u, arg)
-  elseif cmd == "side" then cmd_side(u, arg)
   elseif cmd == "set" then cmd_set(u, arg)
   elseif cmd == "backup" then cmd_backup(u, arg)
   elseif cmd == "dash" and arg == "off" then u:toggle(false)
@@ -751,7 +722,7 @@ function ui:render()
 
   -- 终端（29 提示、30..41 输出、42 输入）
   -- 提示行带中文：光给命令名没人看得懂是干嘛的
-  put(29, pad("终端  help=命令 status=概况 seeds=种子 farms=农场 log N=日志 cal=校准 set=阈值 prio=优先级 side=红石 backup=备份 dash off=关 clear=清屏", W), C.gray)
+  put(29, pad("终端  help=命令 status=概况 seeds=种子 farms=农场 log N=日志 cal=校准 set=阈值 prio=优先级 backup=备份 dash off=关 clear=清屏", W), C.gray)
   local nout = 12
   local from = math.max(1, #self.termout - nout + 1)
   for i = 1, nout do

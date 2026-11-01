@@ -220,17 +220,10 @@ function farmio:pulse(addr, width, side)
   local errs = write_all(addr, 0)
   if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
 
-  if side ~= nil then
-    local s = tonumber(side)
-    local ok, err = invoke(addr, "setOutput", s, 15)
-    if not ok then return false, string.format("面%d 写 15 失败：%s", s, tostring(err)) end
-    os.sleep(w)
-    invoke(addr, "setOutput", s, 0)
-  else
-    write_all(addr, 15)
-    os.sleep(w)
-    write_all(addr, 0)
-  end
+  -- 默认「六面全写」：不管朝向是哪一面，贴着工具台的那面一定能收到（用户要求，2026-11-01）
+  write_all(addr, 15)
+  os.sleep(w)
+  write_all(addr, 0)
   last_pulse[addr] = realsec()
   return true
 end

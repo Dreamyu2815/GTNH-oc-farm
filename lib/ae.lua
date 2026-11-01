@@ -5,8 +5,18 @@ local component = require("component")
 local util = require("lib.util")
 
 -- 英文名 -> 中文名（英文客户端/未本地化作物的 label 是英文时翻回中文）
-local okZh, zhMap = pcall(require, "crops_zh")
-local CROPS_ZH = (okZh and type(zhMap) == "table") and zhMap or {}
+-- 多路径加载：require 依赖 cwd，服务器上不一定找得到 → 再试相对/绝对路径
+local CROPS_ZH = {}
+do
+  local okz, mz = pcall(require, "crops_zh")
+  if okz and type(mz) == "table" then CROPS_ZH = mz end
+  if not next(CROPS_ZH) then
+    for _, p in ipairs({ "crops_zh.lua", "/home/ocfarm/crops_zh.lua", "lib/crops_zh.lua" }) do
+      local ok2, m2 = pcall(dofile, p)
+      if ok2 and type(m2) == "table" and next(m2) then CROPS_ZH = m2 break end
+    end
+  end
+end
 local function zh(s)
   local z = CROPS_ZH[s]
   return z or s

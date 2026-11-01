@@ -55,7 +55,7 @@ local function merge_farms(binds_farms)
       iface          = b.iface,
       iface_name     = b.iface_name,
       interface_name = b.iface_name,           -- pat.lua 按这个名字认下单接口
-      redstone_side  = (beh.redstone_side ~= nil) and beh.redstone_side or 1,
+      redstone_side  = beh.redstone_side,   -- 不设默认面：nil = 六面全写（不再绑朝向）
       enabled        = (beh.enabled == nil) and true or beh.enabled,
     }
   end
@@ -589,7 +589,7 @@ local function auto_config()
         lastLayer[#lastLayer + 1] = ci.crop
         if ci.subsoil and not bedKnown then bedUnknown[#bedUnknown + 1] = ci.crop end
         added[#added + 1] = string.format("%s（产物 %s ×%d，垫块 %s，苗床 %s）",
-          ci.crop, ci.product, ci.mult, ci.subsoil or "无",
+          ci.crop, zh(ci.product), ci.mult, ci.subsoil or "无",
           bedKnown and tostring(bedKnown) or (ci.subsoil and "5(保守)" or "0"))
       end
     end
@@ -1572,7 +1572,7 @@ local function advance_inner(f, stx, seeds, allSeed, prod, info, serr)
 
   if DRY then
     note("dry:" .. f.id .. ":" .. asg.crop .. ":" .. asg.n,
-      "[试运行] 农场 %d 会下单 %s ×%d（mult=%d）", f.id, asg.out, asg.n, asg.mult)
+      "[试运行] 农场 %d 会下单 %s ×%d（mult=%d）", f.id, zh(asg.out), asg.n, asg.mult)
     return
   end
 
@@ -1615,7 +1615,7 @@ local function advance_inner(f, stx, seeds, allSeed, prod, info, serr)
     t0 = upsec(),
     created = upsec(),
   }
-  say("[分配] 农场 %d：%s ×%d（种子网剩 %d 颗）", f.id, asg.out, asg.n, math.floor(seedBefore))
+  say("[分配] 农场 %d：%s ×%d（种子网剩 %d 颗）", f.id, zh(asg.out), asg.n, math.floor(seedBefore))
   ASSIGN[f.id] = nil
   local guard = 0
   repeat
@@ -1773,7 +1773,7 @@ local ok, err = pcall(function()
             tostring(p and p.count or 0), tostring(th.low or 64), tostring(th.high or 512),
             tostring(sd and sd.count or 0),
             ci2.subsoil and tostring(sub and sub.count or 0) or "(无需求)",
-            tostring(ci2.bed or 0), out)
+            tostring(ci2.bed or 0), zh(out))
           local entry, cerr = A:find_craftable_by_label("seed", out)
           if entry then
             say("[试运行]   → 样板可用")

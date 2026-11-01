@@ -33,6 +33,16 @@ local computer = require("computer")
 local cfg = dofile(ROOT .. "/config.lua")
 local util = loadmod("util")
 util.merge_ae(cfg, ROOT)   -- 网络地址以 ae.dat 为准
+-- 英文服：作物/产物名翻回中文（crops_zh.lua 从客户端汉化提取；加载不到就原样显示）
+local CROPS_ZH = nil
+do
+  local okz, z = pcall(function() return util.load(ROOT .. "/crops_zh.lua", nil) end)
+  if okz and type(z) == "table" then CROPS_ZH = z end
+end
+local function zh(s)
+  if not s or not CROPS_ZH then return s end
+  return CROPS_ZH[s] or s
+end
 local farmio = loadmod("farmio")
 local aemod = loadmod("ae")
 local patmod = loadmod("pat")
@@ -288,7 +298,7 @@ if not src_slot then
 end
 
 say("========== 绑定自检（verify） ==========")
-say("测试作物：%s（下单目标 %s，1 批 %d 颗）", crop, tostring(out), mult)
+say("测试作物：%s（下单目标 %s，1 批 %d 颗）", zh(crop), zh(tostring(out)), mult)
 say("仓库接口：%s（槽 %d）", PAT:name_of(wh), src_slot)
 say("==========================================")
 
@@ -363,7 +373,7 @@ for idx, bind in ipairs(binds.farms) do
       say("[FAIL] %s 下单失败：%s", label, tostring(jerr))
       goto move_back
     end
-    say("[下单] %s %s ×%d", label, tostring(out), mult)
+    say("[下单] %s %s ×%d", label, zh(tostring(out)), mult)
 
     -- 6) 等 CPU 任务发配完成 + 1 秒（和 main.lua 同步：不再猜 4.25 秒）
     local ddone, dmsg, del = wait_dispatched(job, crop, before, mult, 300)
@@ -384,7 +394,7 @@ for idx, bind in ipairs(binds.farms) do
       say("[FAIL] %s 脉冲失败：%s", label, tostring(perr))
       goto move_back
     end
-    say("[脉冲] %s 切 Farm（面 %s）", label, tostring(side))
+    say("[脉冲] %s 切 Farm（%s）", label, side and ("面 " .. tostring(side)) or "六面全写")
 
     -- 刷新工作开关（关→开），和 main.lua 一致：防"切 Farm 后机器不开工"卡生长
     os.sleep(0.3)

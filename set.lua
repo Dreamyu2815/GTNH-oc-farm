@@ -373,45 +373,7 @@ if a1 == "list" then
   return
 end
 
--- lua set.lua side [农场号 [面0..5]]   —— 红石端口热改，写 farms.dat（main.lua 轮询自动生效，无需重启）
-if a1 == "side" then
-  local FARMS_FILE = ROOT .. "/farms.dat"
-  local side_name = function(n)
-    local names = { "下(0)", "上(1)", "北(2)", "南(3)", "西(4)", "东(5)" }
-    return names[math.floor(tonumber(n) or 0) + 1] or ("面" .. tostring(n))
-  end
-  local ft = util.load(FARMS_FILE, nil)
-  if type(ft) ~= "table" or type(ft.farms) ~= "table" then ft = { farms = {}, seq = 0 } end
-  ft.farms = ft.farms or {}
-  ft.seq = tonumber(ft.seq) or 0
-  if not args[2] then
-    if next(ft.farms) == nil then
-      print("还没有红石端口覆盖（默认面 1=上；农场 2/3 也继承 1=上）。")
-    else
-      for id, o in pairs(ft.farms) do
-        print(string.format("农场 %s：红石端口 %s", tostring(id), side_name(o.redstone_side)))
-      end
-    end
-    print("用法：lua set.lua side <农场号> <面0..5>   （0=下 1=上 2=北 3=南 4=西 5=东）")
-    return
-  end
-  local sid = tonumber(args[2])
-  local sside = tonumber(args[3])
-  if not sid or not sside then
-    print("用法：lua set.lua side <农场号> <面0..5>   （0=下 1=上 2=北 3=南 4=西 5=东）")
-    return
-  end
-  sside = math.floor(sside)
-  if sside < 0 or sside > 5 then
-    print("面号范围 0..5（0=下 1=上 2=北 3=南 4=西 5=东），没改。")
-    return
-  end
-  ft.farms[tostring(sid)] = { redstone_side = sside }
-  ft.seq = ft.seq + 1
-  util.save(FARMS_FILE, ft)
-  print(string.format("已设置农场 %d：红石端口 %s。main.lua 约一个轮询周期内生效，无需重启。", sid, side_name(sside)))
-  return
-end
+-- 红石端口朝向已取消：脉冲默认「六面全写」，不需要绑定朝向（2026-11-01 用户要求）
 
 -- lua set.lua 2：直接进 2 号作物的编辑菜单
 if a1 and tonumber(a1) then
