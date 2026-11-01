@@ -216,14 +216,24 @@ function farmio:pulse(addr, width, side)
     os.sleep(1 - gap)
   end
 
-  -- 先把所有面拉回 0，保证下面是一次干净的上升沿
-  local errs = write_all(addr, 0)
-  if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
+  -- side 是有效朝向（0..5）时，只写那一面（bind.lua 测好朝向、写进 binds.dat 的农场走这里）。
+  -- side 为 nil 时退回「六面全写」（朝向未知的默认，也是回退路径）。
+  if type(side) == "number" and side >= 0 and side <= 5 then
+    local ok0, e0 = invoke(addr, "setOutput", side, 0)
+    if not ok0 then return false, "红石端口写不进去（面" .. tostring(side) .. "）：" .. tostring(e0) end
+    invoke(addr, "setOutput", side, 15)
+    os.sleep(w)
+    invoke(addr, "setOutput", side, 0)
+  else
+    -- 先把所有面拉回 0，保证下面是一次干净的上升沿
+    local errs = write_all(addr, 0)
+    if #errs > 0 then return false, "红石端口写不进去：" .. table.concat(errs, "; ") end
 
-  -- 默认「六面全写」：不管朝向是哪一面，贴着工具台的那面一定能收到（用户要求，2026-11-01）
-  write_all(addr, 15)
-  os.sleep(w)
-  write_all(addr, 0)
+    -- 默认「六面全写」：不管朝向是哪一面，贴着工具台的那面一定能收到（用户要求，2026-11-01）
+    write_all(addr, 15)
+    os.sleep(w)
+    write_all(addr, 0)
+  end
   last_pulse[addr] = realsec()
   return true
 end

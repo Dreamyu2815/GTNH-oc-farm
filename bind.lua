@@ -273,6 +273,45 @@ local function show_manual(list)
   print("  按数字选一个绑给这台；再按 m 刷新列表")
 end
 
+-- ============ 红石朝向校准（可选，测试用，可回退） ============
+-- 单面发一次脉冲（校准用，不经过 farmio：farmio.pulse 默认是六面全写）
+local function pulse_face(addr, side, w)
+  pcall(component.invoke, addr, "setOutput", side, 0)
+  pcall(component.invoke, addr, "setOutput", side, 15)
+  os.sleep(w)
+  pcall(component.invoke, addr, "setOutput", side, 0)
+end
+
+local SIDE_NAMES_BIND = {
+  [0] = "0=下(bottom)", [1] = "1=上(top)",
+  [2] = "2=北(north)",  [3] = "3=南(south)",
+  [4] = "4=西(west)",   [5] = "5=东(east)",
+}
+
+-- 逐面发脉冲，让用户指出哪一面贴着活化工具台。
+-- 返回 0..5；返回 nil 表示跳过（保持六面全写，即回退路径）。
+local function calibrate_side(addr)
+  print("")
+  print("测红石朝向（可选，测试用）：依次对 6 个面各发一次脉冲，请盯紧活化工具台")
+  print("  · 目的是确认哪一面贴着工具台，之后 main 就只写这一面（不再六面全写）")
+  print("  · 直接回车跳过 = 保持六面全写（就是回退到现在的行为）")
+  for s = 0, 5 do
+    print(string.format("  面 %s …", SIDE_NAMES_BIND[s]))
+    pulse_face(addr, s, 0.1)
+    os.sleep(1.5)
+  end
+  io.write("哪一面触发工具台挥击？（0下 1上 2北 3南 4西 5东，回车跳过）：")
+  local line = io.read("*l")
+  line = line and tostring(line):gsub("^%s+", ""):gsub("%s+$", "")
+  local n = tonumber(line)
+  if n and n >= 0 and n <= 5 then
+    say("[朝向] 已记录：面 %d（%s）", n, SIDE_NAMES_BIND[n])
+    return n
+  end
+  say("[朝向] 跳过，保持六面全写。")
+  return nil
+end
+
 local function wait_redstone(label)
   flush_signals()
   local prev = addr_set(redstone_addrs())
@@ -534,11 +573,13 @@ while i <= #farms do
         say("[错误] 这个端口已经绑给其它农场了（gt %s）。请换一个端口，或双击 u 撤销。", tostring(dup.gt))
       else
         local loc = f.iface and f.iface.location
+        local side = calibrate_side(val)
         local rec = {
           id = i,
           gt = f.gt,
           x = f.x, y = f.y, z = f.z, dimension = f.dimension,
           redstone = val,
+          redstone_side = side,
           iface_name = iface_name(f.iface),
           iface = (loc and type(loc) == "table") and {
             x = loc.x, y = loc.y, z = loc.z, dimension = loc.dimId or loc.dimension or 0
@@ -568,9 +609,10 @@ while #skipped > 0 do
     elseif act == "save" then save_binds(); say("[保存] 已保存，退出绑定向导。"); return
     elseif act == "bind" then
       local loc = f.iface and f.iface.location
+      local side = calibrate_side(val)
       local rec = {
         id = idx, gt = f.gt, x = f.x, y = f.y, z = f.z, dimension = f.dimension,
-        redstone = val, iface_name = iface_name(f.iface),
+        redstone = val, redstone_side = side, iface_name = iface_name(f.iface),
         iface = (loc and type(loc) == "table") and { x = loc.x, y = loc.y, z = loc.z, dimension = loc.dimId or loc.dimension or 0 } or nil,
       }
       binds.farms[#binds.farms + 1] = rec
