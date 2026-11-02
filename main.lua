@@ -1465,7 +1465,16 @@ local function allocator(seeds, allSeed, prod, sinfo)
       for fid2 in pairs(cd._busy) do fids[#fids + 1] = tostring(fid2) end
       note("busy:" .. cd.crop, "[跳过] %s：农场 %s 还挂着在制台账，这些农场先不接这个作物", cd.crop, table.concat(fids, ","))
     elseif #idle == 0 and not reserved[cd.crop] then
-      unsatisfied[#unsatisfied + 1] = cd   -- 有农场排队领它了，就不算"没农场"
+      -- 数量不够一份的作物不触发抢占：只剩几颗的作物（如 9 颗红石草）不该把别的农场挤下来
+      local multP = cinfo[cd.crop] or 1
+      local hsP = seedsLeft[cd.crop] or 0
+      local hsubP = cd.subsoil and (subLeft[cd.subsoil] or 0) or math.huge
+      if hsP >= multP and hsubP >= multP then
+        unsatisfied[#unsatisfied + 1] = cd
+      else
+        note("short:" .. cd.crop, "[跳过] %s 凑不满 1 份（1 份需 %d 颗，当前只能凑 %d 颗），不抢占",
+          cd.crop, multP, math.floor(math.min(hsP, hsubP)))
+      end
     end
   end
 
@@ -1482,7 +1491,8 @@ local function allocator(seeds, allSeed, prod, sinfo)
       -- 只抢"真的能接住这个作物"的农场（等级够格），不然挤下来也种不上
       local flv = sinfo[f.id] and sinfo[f.id].level or 0
       if f.enabled ~= false and s and s.phase == "farming" and s.crop
-         and (uNow - (s.since_u or 0)) >= 60 and flv >= top.bed then
+         and (uNow - (s.since_u or 0)) >= 60 and flv >= top.bed
+         and (sinfo[f.id] and (sinfo[f.id].capacity or 0) or 0) >= (cinfo[top.crop] or 1) then
         local li = layer_of(s.crop)
         if li > topLayer then
           local lv = sinfo[f.id] and sinfo[f.id].level or 0
@@ -1647,6 +1657,21 @@ local function ui_fmt_dur(sec)
   return s .. "s"
 end
 
+-- 数值缩写（仪表盘列窄）：100000→10w、500000→50w、1500→1.5k
+local function ui_fmt_num(n)
+  n = math.floor(tonumber(n) or 0)
+  if n >= 10000 then
+    local v = n / 10000
+    if v == math.floor(v) then return string.format("%dw", v) end
+    return string.format("%.1fw", v)
+  elseif n >= 1000 then
+    local v = n / 1000
+    if v == math.floor(v) then return string.format("%dk", v) end
+    return string.format("%.1fk", v)
+  end
+  return tostring(n)
+end
+
 local function ui_snapshot(seeds, allSeed, prod, sinfo, sinfoErr)
   -- 种子行：priority 顺序在前，网络里额外出现的作物排后面
   local seen, order = {}, {}
@@ -1686,7 +1711,7 @@ local function ui_snapshot(seeds, allSeed, prod, sinfo, sinfoErr)
     srows[#srows + 1] = {
       crop = c, net = net, making = mk + pl, idle = math.max(0, net - mk - pl),
       sub = sub, prod = p and math.floor(p.count or 0) or 0,
-      th = string.format("%d-%d", th.low or 64, th.high or 512),
+      th = ui_fmt_num(th.low or 64) .. "-" .. ui_fmt_num(th.high or 512),
     }
   end
   -- 农场行（异常置顶交给 ui.lua 排序）
