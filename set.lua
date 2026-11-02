@@ -33,6 +33,17 @@ local BED = (function()
   return (ok and type(m) == "table") and m or {}
 end)()
 
+-- 英文名 → 中文名（与 main/ae 同源：crops_zh.lua）
+-- 中文客户端上大部分作物已经是中文；个别作物（如 Oak Bonsai）走英文 label 时在这里翻回来，
+-- 否则会出现「同一个作物两条记录」（中文一条、英文一条）。
+local ZH = (function()
+  local ok, m = pcall(dofile, ROOT .. "/crops_zh.lua")
+  return (ok and type(m) == "table") and m or {}
+end)()
+local function zh(s)
+  return ZH[s] or s
+end
+
 -- 收参数（chunk varargs + 全局 arg）
 local args = {}
 do
@@ -63,7 +74,7 @@ if type(cf.crops) == "table" then
   for _, c in ipairs(rest) do add_crop(c) end
 end
 -- limits.dat 里出现过的作物也列出来（以前设过、现在没种子的也能改回来）
-for c in pairs(t.t or {}) do add_crop(c) end
+for c in pairs(t.t or {}) do add_crop(zh(c)) end
 
 -- 种子网络里已有的种子也算作物（主程序 auto_config 认到的可能还没写进 config.lua，
 -- 这里直接列出来，默认 low=64/high=512，也能直接改）
@@ -75,9 +86,13 @@ do
     if okA and A then
       local okS, seeds = pcall(function() return A:seeds_by_label("seed") end)
       if okS and type(seeds) == "table" then
-        local names = {}
+        local names, have = {}, {}
         for crop, d in pairs(seeds) do
-          if d and (d.count or 0) > 0 and not seen[crop] then names[#names + 1] = crop end
+          local c2 = zh(crop)
+          if d and (d.count or 0) > 0 and not seen[c2] and not have[c2] then
+            have[c2] = true
+            names[#names + 1] = c2
+          end
         end
         table.sort(names)
         for _, c in ipairs(names) do netborn[c] = true; add_crop(c) end
