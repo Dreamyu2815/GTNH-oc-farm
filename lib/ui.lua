@@ -59,6 +59,26 @@ local function fmt_ts(sec)
     math.floor(sec / 3600) % 24, math.floor(sec / 60) % 60, sec % 60)
 end
 
+-- 数字缩写，和 AE2 的显示一致：1000→1k、1500→1.5k、100000→100k、1e6→1m、1e9→1g、1e12→1t
+local function fmtn(n)
+  n = math.floor(tonumber(n) or 0)
+  if n < 1000 then return tostring(n) end
+  local units = { { 1e12, "t" }, { 1e9, "g" }, { 1e6, "m" }, { 1e3, "k" } }
+  for _, u in ipairs(units) do
+    if n >= u[1] then
+      local v = n / u[1]
+      local s
+      if v >= 100 or v == math.floor(v) then
+        s = string.format("%d", math.floor(v))
+      else
+        s = string.format("%.1f", v):gsub("%.0$", "")
+      end
+      return s .. u[2]
+    end
+  end
+  return tostring(n)
+end
+
 -- 显示宽度：OC 终端里 1 个 CJK/全角字符占 2 格，ASCII 占 1 格（之前按字节算导致中文被切半、列错位）
 local utf8lib = utf8
 local function is_wide(cp)
@@ -393,7 +413,7 @@ local function cmd_set(u, arg)
     u:term("── 作物阈值（编号操作）──")
     for i, c in ipairs(crops) do
       local v = ui_cur(u, c)
-      u:term(string.format(" %2d) %s  产物=%s  low=%d high=%d 苗床=%d", i, c, v.product, v.low, v.high, v.bed))
+      u:term(string.format(" %2d) %s  产物=%s  low=%s high=%s 苗床=%d", i, c, v.product, fmtn(v.low), fmtn(v.high), v.bed))
     end
     u:term("用法：set <编号> low <值>  或  set <编号> high <值>")
     return
@@ -425,7 +445,7 @@ local function cmd_set(u, arg)
   t.seq = t.seq + 1
   u.util.save(u.ROOT .. "/limits.dat", t)
   local nv = ui_cur(u, crop)
-  u:term(string.format("%s 阈值改为 low=%d high=%d（一个轮询周期内生效）", crop, nv.low, nv.high))
+  u:term(string.format("%s 阈值改为 low=%s high=%s（一个轮询周期内生效）", crop, fmtn(nv.low), fmtn(nv.high)))
 end
 
 -- ---- 终端热命令：配置快照（等价 lua backup.lua）----
@@ -663,11 +683,11 @@ function ui:render()
       local fg = C.white
       if net <= 0 then fg = C.dim elseif net < 90 then fg = C.yellow end
       putx(sx, y, pad(s.crop, 8), fg)
-      putx(sx + 8, y, pad(tostring(s.net), 6, "right"), fg)
-      putx(sx + 14, y, pad(tostring(s.making), 6, "right"), s.making > 0 and C.green or C.dim)
-      putx(sx + 20, y, pad(tostring(s.idle), 6, "right"), fg)
-      putx(sx + 26, y, pad(tostring(s.sub or "-"), 8, "right"), s.sub == nil and C.dim or fg)
-      putx(sx + 34, y, pad(tostring(s.prod), 6, "right"), fg)
+      putx(sx + 8, y, pad(fmtn(s.net), 6, "right"), fg)
+      putx(sx + 14, y, pad(fmtn(s.making), 6, "right"), s.making > 0 and C.green or C.dim)
+      putx(sx + 20, y, pad(fmtn(s.idle), 6, "right"), fg)
+      putx(sx + 26, y, pad(s.sub == nil and "-" or fmtn(s.sub), 8, "right"), s.sub == nil and C.dim or fg)
+      putx(sx + 34, y, pad(fmtn(s.prod), 6, "right"), fg)
       putx(sx + 40, y, pad(tostring(s.th), 11, "right"), C.gray)
     else
       putx(sx, y, string.rep(" ", sw), C.black)
@@ -696,8 +716,8 @@ function ui:render()
     for _, f in ipairs(farms) do
       if y + 4 <= 26 then
         local fg = f.err and C.red or (C[f.fcolor] or C.white)
-        putx(rx, y, "┌" .. pad(" 农场" .. f.id .. " · Lv" .. tostring(f.lv or "?") .. " · 容量" .. tostring(f.cap or 0), rw - 2) .. "┐", C.gray)
-        putx(rx, y + 1, "│ " .. pad("阶段 " .. phase_cn(f.phase) .. " | 作物 " .. (f.crop ~= "" and f.crop or "-") .. " ×" .. f.pending, rw - 4) .. " │", fg)
+        putx(rx, y, "┌" .. pad(" 农场" .. f.id .. " · Lv" .. tostring(f.lv or "?") .. " · 容量" .. fmtn(f.cap or 0), rw - 2) .. "┐", C.gray)
+        putx(rx, y + 1, "│ " .. pad("阶段 " .. phase_cn(f.phase) .. " | 作物 " .. (f.crop ~= "" and f.crop or "-") .. " ×" .. fmtn(f.pending), rw - 4) .. " │", fg)
         putx(rx, y + 2, "│ " .. pad("持续 " .. f.dur .. " · 循环 " .. f.cycles, rw - 4) .. " │", C.white)
         putx(rx, y + 3, "│ " .. pad((f.err and "传感器异常" or (f.note ~= "" and f.note or "正常")), rw - 4) .. " │", f.err and C.red or C.gray)
         putx(rx, y + 4, "└" .. string.rep("─", rw - 2) .. "┘", C.gray)
@@ -712,7 +732,7 @@ function ui:render()
       local f = farms[i]
       local y = 3 + shown
       local fg = f.err and C.red or (C[f.fcolor] or C.white)
-      putx(rx, y, pad(string.format("%d Lv%s %s %s×%s %s 循%d", f.id, tostring(f.lv or "?"), phase_cn(f.phase), f.crop ~= "" and f.crop or "-", f.pending, f.dur, f.cycles), rw), fg)
+      putx(rx, y, pad(string.format("%d Lv%s %s %s×%s %s 循%d", f.id, tostring(f.lv or "?"), phase_cn(f.phase), f.crop ~= "" and f.crop or "-", fmtn(f.pending), f.dur, f.cycles), rw), fg)
       shown = shown + 1
     end
   end

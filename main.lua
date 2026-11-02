@@ -1657,17 +1657,19 @@ local function ui_fmt_dur(sec)
   return s .. "s"
 end
 
--- 数值缩写（仪表盘列窄）：100000→10w、500000→50w、1500→1.5k
+-- 数值缩写（仪表盘列窄，与 AE2 一致）：1000→1k、1500→1.5k、1e6→1m、1e9→1g、1e12→1t
 local function ui_fmt_num(n)
   n = math.floor(tonumber(n) or 0)
-  if n >= 10000 then
-    local v = n / 10000
-    if v == math.floor(v) then return string.format("%dw", v) end
-    return string.format("%.1fw", v)
-  elseif n >= 1000 then
-    local v = n / 1000
-    if v == math.floor(v) then return string.format("%dk", v) end
-    return string.format("%.1fk", v)
+  if n < 1000 then return tostring(n) end
+  local units = { { 1e12, "t" }, { 1e9, "g" }, { 1e6, "m" }, { 1e3, "k" } }
+  for _, u in ipairs(units) do
+    if n >= u[1] then
+      local v = n / u[1]
+      if v >= 100 or v == math.floor(v) then
+        return string.format("%d", math.floor(v)) .. u[2]
+      end
+      return string.format("%.1f", v):gsub("%.0$", "") .. u[2]
+    end
   end
   return tostring(n)
 end
