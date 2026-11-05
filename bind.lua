@@ -559,6 +559,23 @@ while i <= #farms do
     end
   end
   if existing and not need_rebind then
+    -- 接口被玩家重摆过：红石地址和 gt 都没变，但接口坐标变了。这里不重绑红石，只把接口坐标补正，
+    -- 否则 verify.lua 的 PAT:entry_by_loc 会按旧坐标找不到接口（2026-11-05 修）。
+    local loc = f.iface and f.iface.location
+    if loc and type(loc) == "table" then
+      local now_iface = { x = loc.x, y = loc.y, z = loc.z,
+        dimension = loc.dimId or loc.dimension or 0 }
+      local old = existing.iface
+      if not old or old.x ~= now_iface.x or old.y ~= now_iface.y or old.z ~= now_iface.z
+          or (old.dimension or 0) ~= now_iface.dimension then
+        local before = old and string.format("(%s,%s,%s)", tostring(old.x), tostring(old.y), tostring(old.z)) or "无"
+        existing.iface = now_iface
+        existing.iface_name = iface_name(f.iface)
+        save_binds()
+        say("[更新] %s 接口坐标 %s → (%s,%s,%s)，红石不动",
+          label, before, tostring(loc.x), tostring(loc.y), tostring(loc.z))
+      end
+    end
     say("[跳过] %s 已绑定（红石 %s）", label, tostring(existing.redstone))
     i = i + 1
   else
