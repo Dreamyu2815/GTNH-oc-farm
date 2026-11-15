@@ -232,7 +232,7 @@ local function cmd_help(u)
   u:term([[命令速查：
   help        本页
   status      三台农场的当前阶段一行一个
-  farms       农场详情（等级/容量/作物/持续/循环）
+  farms       农场详情（等级/容量/作物/持续）
   seeds       种子明细（网内/在制/闲置/垫块/产物/阈值）
   log [N]     最近 N 行日志（默认 12）
   cal         校准时钟（realTime 与 os.time 对照）
@@ -257,7 +257,7 @@ local function cmd_farms(u)
   if #d.farms == 0 then u:term("（暂无农场数据）") return end
   for _, f in ipairs(d.farms) do
     u:term(string.format("── 农场%d Lv%s 容量%d %s", f.id, f.lv or "?", f.cap or 0, f.err and "[传感器异常]" or ""))
-    u:term(string.format("   阶段 %s | 作物 %s | 持续 %s | 循环 %d", phase_cn(f.phase), f.crop ~= "" and f.crop or "-", f.dur, f.cycles))
+    u:term(string.format("   阶段 %s | 作物 %s | 持续 %s", phase_cn(f.phase), f.crop ~= "" and f.crop or "-", f.dur))
     if f.note ~= "" then u:term("   注记 " .. f.note) end
   end
 end
@@ -718,7 +718,7 @@ function ui:render()
         local fg = f.err and C.red or (C[f.fcolor] or C.white)
         putx(rx, y, "┌" .. pad(" 农场" .. f.id .. " · Lv" .. tostring(f.lv or "?") .. " · 容量" .. fmtn(f.cap or 0), rw - 2) .. "┐", C.gray)
         putx(rx, y + 1, "│ " .. pad("阶段 " .. phase_cn(f.phase) .. " | 作物 " .. (f.crop ~= "" and f.crop or "-") .. " ×" .. fmtn(f.pending), rw - 4) .. " │", fg)
-        putx(rx, y + 2, "│ " .. pad("持续 " .. f.dur .. " · 循环 " .. f.cycles, rw - 4) .. " │", C.white)
+        putx(rx, y + 2, "│ " .. pad("持续 " .. f.dur, rw - 4) .. " │", C.white)
         putx(rx, y + 3, "│ " .. pad((f.err and "传感器异常" or (f.note ~= "" and f.note or "正常")), rw - 4) .. " │", f.err and C.red or C.gray)
         putx(rx, y + 4, "└" .. string.rep("─", rw - 2) .. "┘", C.gray)
         y = y + 6
@@ -732,7 +732,7 @@ function ui:render()
       local f = farms[i]
       local y = 3 + shown
       local fg = f.err and C.red or (C[f.fcolor] or C.white)
-      putx(rx, y, pad(string.format("%d Lv%s %s %s×%s %s 循%d", f.id, tostring(f.lv or "?"), phase_cn(f.phase), f.crop ~= "" and f.crop or "-", fmtn(f.pending), f.dur, f.cycles), rw), fg)
+      putx(rx, y, pad(string.format("%d Lv%s %s %s×%s %s", f.id, tostring(f.lv or "?"), phase_cn(f.phase), f.crop ~= "" and f.crop or "-", fmtn(f.pending), f.dur), rw), fg)
       shown = shown + 1
     end
   end

@@ -841,7 +841,7 @@ local function finish_dispatch(f, stx, dq)
   stx.prod_base = nil      -- 下一 tick 记本场产物基线
   PATLOCK[dq.crop] = nil
   save()
-  say("[切换] 农场 %d → Farm 模式（第 %d 轮，作物 %s）", f.id, stx.cycles + 1, dq.crop)
+  say("[切换] 农场 %d → Farm 模式（作物 %s）", f.id, dq.crop)
 end
 
 -- 发配中途放弃：样板尽量还给仓库、清掉这台流水线状态，退回 input 等下一轮分配。
@@ -1192,7 +1192,7 @@ local function advance_farming(f, stx, prod, seeds, allSeed)
     save()
     say("[切换] 农场 %d → Output 模式（产物 %d/%d，回收上限 %d 秒）", f.id, cur, h,
       math.floor((cfg.timing and cfg.timing.reclaim_timeout) or 180))
-  elseif u - (stx.since_u or u) > T.grow_timeout then
+  elseif T.grow_timeout and T.grow_timeout > 0 and u - (stx.since_u or u) > T.grow_timeout then
     local gs = u - (stx.since_u or u)
     say("[警告] 农场 %d 生长超时 %d 秒，检查农场/供电", f.id, math.floor(gs))
     stx.since = now()
@@ -1275,7 +1275,7 @@ local function advance_reclaim(f, stx, seeds, allSeed)
     local partial = (pending > 0 and got < pending)
     say("[回收] 农场 %d %s：%s%s", f.id, tostring(stx.crop or "-"), table.concat(parts, " · "),
       partial and "（其余已种下/在机器里，继续长）" or "")
-    say("[完成] 农场 %d 第 %d 轮（网络原有 种子 %d · 垫块 %d）", f.id, stx.cycles + 1, base, stx.sub_base or 0)
+    say("[完成] 农场 %d 一轮完成（网络原有 种子 %d · 垫块 %d）", f.id, base, stx.sub_base or 0)
     say("[切换] 农场 %d → Input 模式", f.id)
     if stx.task_id then TASKS:finish(stx.task_id); stx.task_id = nil end
     if stx.crop and RECLAIM[stx.crop] == f.id then RECLAIM[stx.crop] = nil end
@@ -1394,54 +1394,51 @@ local function allocator(seeds, allSeed, prod, sinfo)
   end
   local batch = (cfg.timing and cfg.timing.batch) or 0
   local maxItems = (cfg.timing and cfg.timing.max_items) or 0
-  local progressed = true
-  while progressed and #idle > 0 do
-    progressed = false
-    for _, cd in ipairs(cands) do
-      if #idle == 0 then break end
-      if not reclaiming[cd.crop] then
-        note_clear("reclaim_wait:" .. cd.crop)
-        local mult = cinfo[cd.crop]
-        -- 输入总线推满了只会卡住（推送目标已满），农场消化掉就继续，不算失败；
-        -- 所以不再按 max_items 卡单次发配量，只保留一个可选的上限配置（0=不限）
-        local itemCap = math.huge
-        if maxItems > 0 then itemCap = math.floor(maxItems / mult) * mult end
-        local i = 1
-        while i <= #idle do
-          local fe = idle[i]
-          if fe.level < cd.bed then
-            cd._level = true
-            i = i + 1
-          else
-            local haveS = seedsLeft[cd.crop] or 0
-            local haveSub = cd.subsoil and (subLeft[cd.subsoil] or 0) or math.huge
-            -- 农场容量按种子数算（用户实测：机器能装 3k+ 颗种子），一批 = mult 颗种子
-            local capSeeds = (mult > 1) and (math.floor(fe.cap / mult) * mult) or math.floor(fe.cap)
-            local avail = math.min(haveS, haveSub, capSeeds, itemCap)
-            if batch > 0 then avail = math.min(avail, batch) end
-            local n = (mult > 1) and (math.floor(avail / mult) * mult) or math.floor(avail)
-            if n > 0 then
-              if TASKS:inflight(cd.crop, fe.fid) == 0 then
-                ASSIGN[fe.fid] = { crop = cd.crop, n = n, out = cd.out, mult = mult, subsoil = cd.subsoil }
-                seedsLeft[cd.crop] = haveS - n
-                if cd.subsoil then subLeft[cd.subsoil] = haveSub - n end
-                table.remove(idle, i)
-                cd._got = true
-                progressed = true
-                break      -- 这个候选本轮先拿一台，剩下的轮给别的作物
-              else
-                i = i + 1  -- 这台对这个作物有在制，跳过这台（别的农场不受影响）
-                cd._busy = cd._busy or {}
-                cd._busy[fe.fid] = TASKS:inflight(cd.crop, fe.fid)
-              end
+  -- ⑤ 严格按优先级装箱：一个候选先把空闲农场喂满（受种子/垫块/容量限制），
+  --    喂不下了才轮到下一个候选。以前「每个候选每轮只拿一台」会在开机第一轮
+  --    把每台农场分给不同作物，高优先级那台一抢，刚发配的低优先级作物就被打断。
+  for _, cd in ipairs(cands) do
+    if #idle == 0 then break end
+    if reclaiming[cd.crop] then
+      note("reclaim_wait:" .. cd.crop, "[等待] %s 等农场回收完再发（避免抢走别人正在等的种子）", cd.crop)
+    else
+      note_clear("reclaim_wait:" .. cd.crop)
+      local mult = cinfo[cd.crop]
+      -- 输入总线推满了只会卡住（推送目标已满），农场消化掉就继续，不算失败；
+      -- 所以不再按 max_items 卡单次发配量，只保留一个可选的上限配置（0=不限）
+      local itemCap = math.huge
+      if maxItems > 0 then itemCap = math.floor(maxItems / mult) * mult end
+      local i = 1
+      while i <= #idle do
+        local fe = idle[i]
+        if fe.level < cd.bed then
+          cd._level = true
+          i = i + 1
+        else
+          local haveS = seedsLeft[cd.crop] or 0
+          local haveSub = cd.subsoil and (subLeft[cd.subsoil] or 0) or math.huge
+          -- 农场容量按种子数算（用户实测：机器能装 3k+ 颗种子），一批 = mult 颗种子
+          local capSeeds = (mult > 1) and (math.floor(fe.cap / mult) * mult) or math.floor(fe.cap)
+          local avail = math.min(haveS, haveSub, capSeeds, itemCap)
+          if batch > 0 then avail = math.min(avail, batch) end
+          local n = (mult > 1) and (math.floor(avail / mult) * mult) or math.floor(avail)
+          if n > 0 then
+            if TASKS:inflight(cd.crop, fe.fid) == 0 then
+              ASSIGN[fe.fid] = { crop = cd.crop, n = n, out = cd.out, mult = mult, subsoil = cd.subsoil }
+              seedsLeft[cd.crop] = haveS - n
+              if cd.subsoil then subLeft[cd.subsoil] = haveSub - n end
+              table.remove(idle, i)
+              cd._got = true
             else
-              if fe.cap >= mult then cd._short = true else cd._small = true end
-              i = i + 1    -- 这台容量/存量不够凑一份，看下一台
+              i = i + 1  -- 这台对这个作物有在制，跳过这台（别的农场不受影响）
+              cd._busy = cd._busy or {}
+              cd._busy[fe.fid] = TASKS:inflight(cd.crop, fe.fid)
             end
+          else
+            if fe.cap >= mult then cd._short = true else cd._small = true end
+            i = i + 1    -- 这台容量/存量不够凑一份，看下一台
           end
         end
-      else
-        note("reclaim_wait:" .. cd.crop, "[等待] %s 等农场回收完再发（避免抢走别人正在等的种子）", cd.crop)
       end
     end
   end
@@ -1636,12 +1633,12 @@ local function advance_inner(f, stx, seeds, allSeed, prod, info, serr)
 end
 
 local function advance(f, stx, seeds, allSeed, prod, info, serr)
-  local before = string.format("%s|%s|%d", stx.phase, tostring(stx.crop), stx.cycles)
+  local before = string.format("%s|%s", stx.phase, tostring(stx.crop))
   advance_inner(f, stx, seeds, allSeed, prod, info, serr)
-  local after = string.format("%s|%s|%d", stx.phase, tostring(stx.crop), stx.cycles)
+  local after = string.format("%s|%s", stx.phase, tostring(stx.crop))
   if after ~= before and after ~= sigs[f.id] then
     sigs[f.id] = after
-    say("[状态] 农场 %d | 阶段=%s 作物=%s 已循环=%d%s", f.id, stx.phase, tostring(stx.crop), stx.cycles,
+    say("[状态] 农场 %d | 阶段=%s 作物=%s%s", f.id, stx.phase, tostring(stx.crop),
       DRY and " (试运行)" or "")
   end
 end
@@ -1733,7 +1730,6 @@ local function ui_snapshot(seeds, allSeed, prod, sinfo, sinfoErr)
         phase = phase, crop = tostring(s.crop or ""),
         pending = math.floor((s.dq and s.dq.n or s.pending) or 0),
         dur = ui_fmt_dur(upsec() - (s.since_u or upsec())),
-        cycles = s.cycles or 0,
         note = (sinfoErr[f.id] ~= nil and ("传感器:" .. tostring(sinfoErr[f.id]))) or (s.dq and ("步骤:" .. tostring(s.dq.step)) or ""),
         err = sinfoErr[f.id] ~= nil,
         fcolor = fc,
@@ -1950,6 +1946,6 @@ ui_restore()
 local exit_parts = {}
 for _, f in ipairs(cfg.farms) do
   local s = ST.farms[f.id] or {}
-  exit_parts[#exit_parts + 1] = string.format("#%d:%s/%s(循环%d)", f.id, tostring(s.phase or "-"), tostring(s.crop or "-"), s.cycles or 0)
+  exit_parts[#exit_parts + 1] = string.format("#%d:%s/%s", f.id, tostring(s.phase or "-"), tostring(s.crop or "-"))
 end
 say("[退出] 状态已保存：%s", table.concat(exit_parts, " "))
