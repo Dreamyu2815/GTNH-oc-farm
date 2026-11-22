@@ -1442,6 +1442,16 @@ local function allocator(seeds, allSeed, prod, sinfo)
       end
     end
   end
+  -- 抢占前置条件：所有启用的农场都在 farming（没有 input 排队、没有 reclaim 回收中）。
+  -- 只要还有一台农场在 input（空闲/等发配）或 reclaim，就先等它——不能"有空闲农场还把在种的挤掉"。
+  local allBusy = true
+  for _, f in ipairs(cfg.farms) do
+    local s = ST.farms[f.id]
+    if f.enabled ~= false and s then
+      if s.phase ~= "farming" or s.dq then allBusy = false break end
+    end
+  end
+
   -- 没分到农场的候选：能分的都分完了，剩下的要么凑不满/等级不够，要么没空闲农场（留给抢占）
   for _, cd in ipairs(cands) do
     if cd._got then
@@ -1481,6 +1491,10 @@ local function allocator(seeds, allSeed, prod, sinfo)
   if #unsatisfied > 0 then
     local top = unsatisfied[1]
     local topLayer = layer_of(top.crop)
+    if not allBusy then
+      note("preempt_wait:" .. top.crop, "[等待] %s 有种子，但还有农场在空闲/排队/回收中，等它们轮转，不抢占", top.crop)
+    else
+    note_clear("preempt_wait:" .. top.crop)
     local uNow = upsec()
     local victim = nil
     for _, f in ipairs(cfg.farms) do
@@ -1533,6 +1547,7 @@ local function allocator(seeds, allSeed, prod, sinfo)
         say("[抢占] 农场 %d 在种 %s（第 %d 层，优先级低），让位给第 %d 层的 %s（种子 %d 颗没地用），切 Output 回收",
           victim, tostring(vs.crop), layer_of(vs.crop), topLayer, top.crop, math.floor(top.seeds))
       end
+    end
     end
   end
 end
