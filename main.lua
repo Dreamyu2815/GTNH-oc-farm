@@ -16,6 +16,7 @@ end
 local computer = require("computer")
 local component = require("component")
 local event = require("event")
+local fs = require("filesystem")
 local ae = loadmod("ae")
 local farmio = loadmod("farmio")
 local util = loadmod("util")
@@ -263,6 +264,10 @@ do
 end
 local function save() util.save(cfg.paths.state, ST) end
 
+-- 日志句柄/轮转状态：常开一个句柄，每 200 行查一次大小，超过 256KB 滚到 log.1.txt。
+-- （旧版每行 open/close：硬盘写满或写失败时 close 被跳过 → 句柄很快耗尽，跑一两天就崩）
+local LOG_FH, LOG_LINES, LOG_MAX_BYTES = nil, 0, 256 * 1024
+
 local function say(fmt, ...)
   local args = table.pack(...)
   -- 这一版 OC 从 AE 拿到的数量是浮点（64.0），直接配 %d 会报
@@ -280,11 +285,27 @@ local function say(fmt, ...)
     s = fmt .. "  <" .. table.concat(parts, ", ") .. ">"
   end
   if UI then UI:log(s) else print(s) end
-  local f = io.open(cfg.paths.log, "a")
-  if f then
-    f:write("[" .. util.stamp() .. "] " .. s .. "\n")
-    f:close()
-  end
+  -- 安全写入：整段 pcall，硬盘写满/句柄异常只丢日志行，绝不把主循环带崩
+  pcall(function()
+    if not LOG_FH then LOG_FH = io.open(cfg.paths.log, "a") end
+    if not LOG_FH then return end
+    LOG_LINES = LOG_LINES + 1
+    if LOG_LINES >= 200 then
+      LOG_LINES = 0
+      local sz = 0
+      local okz, v = pcall(fs.size, cfg.paths.log)
+      if okz and type(v) == "number" then sz = v end
+      if sz > LOG_MAX_BYTES then
+        pcall(function() LOG_FH:close() end)
+        LOG_FH = nil
+        pcall(fs.remove, cfg.paths.log .. ".1")
+        pcall(fs.rename, cfg.paths.log, cfg.paths.log .. ".1")
+        LOG_FH = io.open(cfg.paths.log, "a")
+        if not LOG_FH then return end
+      end
+    end
+    LOG_FH:write("[" .. util.stamp() .. "] " .. s .. "\n")
+  end)
 end
 
 local function stop_flag()
@@ -740,6 +761,13 @@ do
     string.format("%.1f", computer.uptime()),
     okR and type(rt) == "number" and string.format("%.1f", rt) or "无",
     tostring(os.time()))
+end
+do
+  -- 启动时报一下日志体积，方便判断是不是日志把硬盘撑满了（超过 256KB 会自动滚动）
+  local sz = 0
+  local okz, v = pcall(fs.size, cfg.paths.log)
+  if okz and type(v) == "number" then sz = v end
+  say("[启动] 日志 log.txt 当前 %.1fKB（超过 256KB 自动滚动为 log.1.txt）", sz / 1024)
 end
 for _, n in ipairs(heal_notes) do say(n) end
 if #heal_fail > 0 then
@@ -1964,3 +1992,4 @@ for _, f in ipairs(cfg.farms) do
   exit_parts[#exit_parts + 1] = string.format("#%d:%s/%s", f.id, tostring(s.phase or "-"), tostring(s.crop or "-"))
 end
 say("[退出] 状态已保存：%s", table.concat(exit_parts, " "))
+if LOG_FH then pcall(function() LOG_FH:close() end); LOG_FH = nil end

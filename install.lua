@@ -20,6 +20,7 @@ local FILES = {
   "main.lua", "config.lua", "setup.lua", "set.lua", "help.lua",
   "reset.lua", "backup.lua", "discover.lua", "bind.lua", "verify.lua",
   "crops.lua", "crops_bed.lua", "crops_zh.lua", "specs.lua", "check.lua",
+  "run.lua",
   "lib/ae.lua", "lib/farmio.lua", "lib/pat.lua", "lib/selfcheck.lua",
   "lib/tasks.lua", "lib/util.lua", "lib/ui.lua",
 }
@@ -90,13 +91,25 @@ local function main(args)
     print("可以重跑 lua install.lua 重试（只会覆盖）。")
     return
   end
+
+  -- 装全局命令 run：/bin 在 PATH 里，任何目录下都能直接跑
+  local okRun, errRun = pcall(function()
+    filesystem.remove("/bin/run.lua")
+    filesystem.copy(DEST .. "/run.lua", "/bin/run.lua")
+  end)
+  if okRun then
+    print("已安装全局命令：run（任何目录下直接输入 run 启动）")
+  else
+    print("提示：全局命令 run 没装上（不影响主程序）：" .. tostring(errRun))
+  end
+
   print("")
   print("下一步（先进入安装目录）：")
   print("  cd /home/ocfarm")
   print("  1) lua setup.lua    —— 探测并确认 AE 网络地址（生成 ae.dat）")
   print("  2) lua bind.lua     —— 绑定每台农场的控制器和红石口（生成 binds.dat）")
   print("  3) lua specs.lua    —— 看看这台电脑配置够不够")
-  print("  4) lua main.lua     —— 启动；F1 打开仪表盘")
+  print("  4) lua main.lua     —— 启动；F1 打开仪表盘（装好 run 命令后，任何目录下直接输入 run 也行）")
 end
 
 main({ ... })
