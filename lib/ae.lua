@@ -2,7 +2,27 @@
 -- 注意：这一版 OC 里 proxy 上的"方法"是 table（带 __call），不是 function；
 -- 所以既试 proxy[name](...)，也回退到 component.invoke(addr, name, ...)。
 local component = require("component")
-local util = require("lib.util")
+-- 兼容任意 CWD 加载 util：run 命令可能在 /home 下启动，require("lib.util") 会找不到
+local function load_util()
+  local m = package.loaded["util"] or package.loaded["lib.util"]
+  if type(m) == "table" then return m end
+  for _, name in ipairs({ "lib.util", "util" }) do
+    local ok, mod = pcall(require, name)
+    if ok and type(mod) == "table" then return mod end
+  end
+  local cands = { "/home/ocfarm/lib/util.lua", "./lib/util.lua", "util.lua" }
+  local src = debug and debug.getinfo and debug.getinfo(1, "S") and debug.getinfo(1, "S").source
+  if src then
+    local d = src:match("@(.*/)")
+    if d then table.insert(cands, 1, d .. "util.lua") end
+  end
+  for _, path in ipairs(cands) do
+    local ok, mod = pcall(dofile, path)
+    if ok and type(mod) == "table" then return mod end
+  end
+  error("lib/util.lua 加载失败（请确认 /home/ocfarm/lib/util.lua 存在）", 0)
+end
+local util = load_util()
 
 -- 英文名 -> 中文名（英文客户端/未本地化作物的 label 是英文时翻回中文）
 -- 多路径加载：require 依赖 cwd，服务器上不一定找得到 → 再试相对/绝对路径

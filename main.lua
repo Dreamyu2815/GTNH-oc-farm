@@ -17,9 +17,12 @@ local computer = require("computer")
 local component = require("component")
 local event = require("event")
 local fs = require("filesystem")
+local util = loadmod("util")
+-- 注册到 package.loaded：lib 里的 require("lib.util")/require("util") 在任意 CWD 下也能命中
+package.loaded["util"] = util
+package.loaded["lib.util"] = util
 local ae = loadmod("ae")
 local farmio = loadmod("farmio")
-local util = loadmod("util")
 local selfcheck = loadmod("selfcheck")
 local tasksmod = loadmod("tasks")
 local cfg = dofile(ROOT .. "/config.lua")

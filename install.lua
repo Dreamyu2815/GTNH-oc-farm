@@ -6,6 +6,7 @@
 --   lua install.lua https://cdn.jsdelivr.net/gh/Dreamyu2815/GTNH-oc-farm@main/
 -- 说明：
 --   * 会下载到 /home/ocfarm/，覆盖同名文件
+--   * 清单优先读仓库里的 install.files.txt（以后加文件不用换安装器），读不到用内置清单
 --   * 下载完提示你跑 lua setup.lua（配置 AE 地址）和 lua bind.lua（绑定农场）
 --   * 如果一直卡住：检查是否装了网卡、服务端 config 里 enableHttp 是否为 true
 
@@ -16,11 +17,12 @@ local filesystem = require("filesystem")
 local DEFAULT_BASE = "https://raw.githubusercontent.com/Dreamyu2815/GTNH-oc-farm/main/"
 local DEST = "/home/ocfarm"
 
-local FILES = {
+-- 内置清单（仓库 install.files.txt 读不到时用；两边不一致时以仓库清单为准）
+local FALLBACK_FILES = {
   "main.lua", "config.lua", "setup.lua", "set.lua", "help.lua",
   "reset.lua", "backup.lua", "discover.lua", "bind.lua", "verify.lua",
   "crops.lua", "crops_bed.lua", "crops_zh.lua", "specs.lua", "check.lua",
-  "run.lua",
+  "run.lua", "install.lua",
   "lib/ae.lua", "lib/farmio.lua", "lib/pat.lua", "lib/selfcheck.lua",
   "lib/tasks.lua", "lib/util.lua", "lib/ui.lua",
 }
@@ -52,6 +54,37 @@ local function fetch(url, path)
   return n
 end
 
+-- 读纯文本（不落盘）
+local function fetch_text(url)
+  local ok, response = pcall(internet.request, url, nil, { ["user-agent"] = "ocfarm-install" })
+  if not ok or not response then return nil end
+  local text = {}
+  local ok2 = pcall(function()
+    for chunk in response do text[#text + 1] = chunk end
+  end)
+  if not ok2 then return nil end
+  return table.concat(text)
+end
+
+local function parse_manifest(text)
+  local list = {}
+  for line in text:gmatch("[^\r\n]+") do
+    line = line:gsub("^%s+", ""):gsub("%s+$", "")
+    if line ~= "" and line:sub(1, 1) ~= "#" then list[#list + 1] = line end
+  end
+  return list
+end
+
+-- 优先用仓库清单（install.files.txt），失败用内置清单
+local function load_files(base)
+  local text = fetch_text(base .. "install.files.txt")
+  if text then
+    local list = parse_manifest(text)
+    if #list > 0 then return list, "仓库清单" end
+  end
+  return FALLBACK_FILES, "内置清单"
+end
+
 local function main(args)
   if not component.isAvailable("internet") then
     print("这台电脑没有网卡（Internet Card），无法联网下载。")
@@ -66,6 +99,10 @@ local function main(args)
   local okd, derr = mkdir(DEST)
   if not okd then print("创建目录失败: " .. tostring(derr)); return end
   mkdir(DEST .. "/lib")
+
+  local FILES, src = load_files(base)
+  print(string.format("清单：%d 个文件（%s）", #FILES, src))
+  local base2 = (src == "内置清单") and "（仓库清单 download 失败，按内置清单）" or ""
 
   local okn, bad = 0, {}
   for i = 1, #FILES do
@@ -84,11 +121,11 @@ local function main(args)
   end
 
   print("")
-  print(string.format("完成：%d/%d 个文件。", okn, #FILES))
+  print(string.format("完成：%d/%d 个文件。%s", okn, #FILES, base2))
   if #bad > 0 then
     print("以下文件没下载成功：")
     for _, b in ipairs(bad) do print("  " .. b) end
-    print("可以重跑 lua install.lua 重试（只会覆盖）。")
+    print("可以重跑 lua install.lua 重试（只会覆盖）；镜像卡缓存时换 raw 地址或稍等再试。")
     return
   end
 

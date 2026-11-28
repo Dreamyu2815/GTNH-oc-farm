@@ -1,0 +1,27 @@
+﻿# OCFarm 安装清单：install.lua 优先读这个文件（以后加文件不用换安装器）
+# 每行一个路径，相对仓库根；以 # 开头是注释
+
+main.lua
+config.lua
+setup.lua
+set.lua
+help.lua
+reset.lua
+backup.lua
+discover.lua
+bind.lua
+verify.lua
+crops.lua
+crops_bed.lua
+crops_zh.lua
+specs.lua
+check.lua
+run.lua
+install.lua
+lib/ae.lua
+lib/farmio.lua
+lib/pat.lua
+lib/selfcheck.lua
+lib/tasks.lua
+lib/util.lua
+lib/ui.lua

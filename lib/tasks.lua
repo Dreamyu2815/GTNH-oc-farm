@@ -1,6 +1,26 @@
 -- 任务台账：记住"哪个作物、在哪台农场、发了多少颗、什么时候发的"
 -- 比"总种子 - 网络 = 在制"稳：机器里压着多少、压了多久，一目了然，重启也能恢复
-local util = require("lib.util")
+-- 兼容任意 CWD 加载 util：run 命令可能在 /home 下启动，require("lib.util") 会找不到
+local function load_util()
+  local m = package.loaded["util"] or package.loaded["lib.util"]
+  if type(m) == "table" then return m end
+  for _, name in ipairs({ "lib.util", "util" }) do
+    local ok, mod = pcall(require, name)
+    if ok and type(mod) == "table" then return mod end
+  end
+  local cands = { "/home/ocfarm/lib/util.lua", "./lib/util.lua", "util.lua" }
+  local src = debug and debug.getinfo and debug.getinfo(1, "S") and debug.getinfo(1, "S").source
+  if src then
+    local d = src:match("@(.*/)")
+    if d then table.insert(cands, 1, d .. "util.lua") end
+  end
+  for _, path in ipairs(cands) do
+    local ok, mod = pcall(dofile, path)
+    if ok and type(mod) == "table" then return mod end
+  end
+  error("lib/util.lua 加载失败（请确认 /home/ocfarm/lib/util.lua 存在）", 0)
+end
+local util = load_util()
 
 local tasks = {}
 tasks.__index = tasks

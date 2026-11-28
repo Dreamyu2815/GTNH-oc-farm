@@ -6,7 +6,7 @@
 --  全部打印出来，供自动生成 config.lua 的 crops / priority / thresholds。
 -- ============================================================
 local component = require("component")
-local util = require("lib.util")
+local util = dofile("/home/ocfarm/lib/util.lua")
 local cfg = dofile("/home/ocfarm/config.lua")
 util.merge_ae(cfg, "/home/ocfarm")   -- 网络地址以 ae.dat 为准
 local CROPS = dofile("/home/ocfarm/crops.lua")

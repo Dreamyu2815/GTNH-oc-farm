@@ -32,6 +32,8 @@ local computer = require("computer")
 
 local cfg = dofile(ROOT .. "/config.lua")
 local util = loadmod("util")
+package.loaded["util"] = util
+package.loaded["lib.util"] = util
 util.merge_ae(cfg, ROOT)   -- 网络地址以 ae.dat 为准
 -- 英文服：作物/产物名翻回中文（crops_zh.lua 从客户端汉化提取；加载不到就原样显示）
 local CROPS_ZH = nil
