@@ -11,7 +11,7 @@
 ## 一、物理搭建（抄作业最容易翻车的地方）
 
 1. **OC 电脑**：T3 屏（160×50，仪表盘必需；T1/T2 也能跑，只是没有仪表盘）+ 键盘
-   + 红石卡（连农场循环模式输入）。
+   （不需要红石卡——切模式用的是独立的红石 I/O 方块，经适配器接入）。
 2. **两张 AE 网络**：
    - **存储网**：收农场产物。放一个 ME 接口，用适配器（Adapter）贴到 OC 电脑。
    - **种子网**：放种子（ME 存储）、样板（ME 接口）、合成 CPU（至少 1 台，越多越并行）、
@@ -19,7 +19,7 @@
    - 种子网上也要一个贴了适配器的 ME 接口 + 一个 ME 接口终端。
 3. **每台农场**三件套：
    - GT 工业农场（多方块）的**控制器**：用适配器贴住（程序靠 gt_machine 读传感器/工作状态）；
-   - **红石 I/O 口** → 连 OC 电脑的红石卡（切模式）；
+   - **红石 I/O 口**：经适配器接进电脑（组件总线；不需要红石卡），用来切模式；
    - **ME 接口**当"下单接口"→ 连农场的输入总线/输入仓；建议改名"农场1/2/3"。
    - 输入总线容量越大越好（程序会按容量塞满）。
 4. **样板**：每种作物在 AE 里编码一个"伪合成"样板：种子 + 垫块 → 产物，放进仓库接口。
@@ -78,7 +78,7 @@
 ## 五、文件说明
 
 - **运行必需**：main.lua、config.lua、set.lua、help.lua、backup.lua、reset.lua、
-  discover.lua、bind.lua、verify.lua、check.lua、setup.lua、crops.lua、crops_bed.lua、crops_zh.lua、
+  discover.lua、bind.lua、verify.lua、check.lua、setup.lua、crops.lua、crops_bed.lua、
   lib/（ae、pat、farmio、tasks、util、selfcheck、ui）.lua
 - **工具（可选）**：`tools/` 目录，按需拷到 `home/ocfarm` 使用
 - **运行时数据（自动生成，别拷贝）**：ae.dat、binds.dat、state.dat、tasks.dat、

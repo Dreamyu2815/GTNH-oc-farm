@@ -52,7 +52,7 @@ print("")
 
 print("==== 结论 ====")
 if n > 16 then
-  line("组件数 %d 超过 T3 上限 16：减组件（每台农场要 2 个：gt_machine + 红石 I/O），或上服务器机架", n)
+  line("组件数 %d 超过 T3 上限 16：减组件（每台农场要 3 个：gt_machine + 红石 I/O + 下单接口），或上服务器机架", n)
 elseif n > 12 then
   line("组件数 %d：T2(12) 不够 → 需要 T3 CPU(16)", n)
 elseif n > 8 then
